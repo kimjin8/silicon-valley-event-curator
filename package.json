@@ -1,0 +1,28 @@
+{
+  "name": "sillicon_valley_event_curator",
+  "version": "1.0.0",
+  "description": "Weekly Bay Area tech events curator — scrapes, curates with AI, emails a digest",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dry-run": "node index.js --dry-run",
+    "auth": "node index.js --auth",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "keywords": ["events", "curator", "ai", "gemini", "bay-area"],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "dotenv": "^17.3.1",
+    "googleapis": "^171.4.0",
+    "node-cron": "^4.2.1",
+    "playwright": "^1.58.2"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.1"
+  }
+}

@@ -1,0 +1,14 @@
+# Dependencies — installed fresh via npm ci in Docker
+node_modules/
+
+# Credentials — injected via Cloud Run env vars
+google-credentials.json
+google-token.json
+.env
+
+# Dev/docs files not needed in the image
+*.log
+*.md
+.git/
+.gitignore
+.gcloudignore
