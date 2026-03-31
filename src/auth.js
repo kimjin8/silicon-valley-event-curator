@@ -52,10 +52,20 @@ const OAUTH_CALLBACK_PORT = 3099;
  * @throws {Error} If no token file exists (user needs to run --auth)
  */
 async function getGoogleAuthClient() {
-  // Read the app's credentials (client ID and secret)
-  const credentials = JSON.parse(
-    fs.readFileSync(GOOGLE_CREDENTIALS_PATH, "utf8")
-  );
+  // Read the app's credentials (client ID and secret).
+  // In Cloud Run, these are injected as env vars to avoid baking
+  // secrets into the Docker image. Locally, fall back to the files.
+  let credentials;
+  if (process.env.GOOGLE_CREDENTIALS_JSON) {
+    credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS_JSON);
+  } else if (fs.existsSync(GOOGLE_CREDENTIALS_PATH)) {
+    credentials = JSON.parse(fs.readFileSync(GOOGLE_CREDENTIALS_PATH, "utf8"));
+  } else {
+    throw new Error(
+      "No Google credentials found. Either set GOOGLE_CREDENTIALS_JSON env var " +
+        "or place google-credentials.json in the project root."
+    );
+  }
   const { client_id, client_secret } =
     credentials.installed || credentials.web;
 
@@ -67,16 +77,18 @@ async function getGoogleAuthClient() {
     `http://localhost:${OAUTH_CALLBACK_PORT}/oauth2callback`
   );
 
-  // Check if we have a saved token
-  if (!fs.existsSync(GOOGLE_TOKEN_PATH)) {
+  // Load the token — from env var (Cloud Run) or file (local)
+  let token;
+  if (process.env.GOOGLE_TOKEN_JSON) {
+    token = JSON.parse(process.env.GOOGLE_TOKEN_JSON);
+  } else if (fs.existsSync(GOOGLE_TOKEN_PATH)) {
+    token = JSON.parse(fs.readFileSync(GOOGLE_TOKEN_PATH, "utf8"));
+  } else {
     throw new Error(
       "No Google token found. Run: node index.js --auth\n" +
         "This will open a browser where you log in with Google."
     );
   }
-
-  // Load the saved token
-  const token = JSON.parse(fs.readFileSync(GOOGLE_TOKEN_PATH, "utf8"));
   oAuth2Client.setCredentials(token);
 
   // If the token is expired, refresh it automatically.

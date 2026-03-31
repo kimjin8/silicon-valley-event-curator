@@ -1,8 +1,18 @@
 node_modules/
+
+# Google OAuth credentials — generated locally, injected via env in production
 google-credentials.json
 google-token.json
+
+# Secrets — never commit
 .env
+
+# Logs
 *.log
+
+# Personal/internal docs — not for public consumption
 implementation_plan.md
 PRD.md
-weekly-startup-events-curator-export-2026-03-24-00_37_34.md
+
+# Curator export files (generated output)
+*-export-*.md

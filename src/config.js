@@ -26,7 +26,7 @@ const FALLBACK_MODEL = "gemini-3.1-flash-lite-preview";
 const STABLE_FALLBACK_MODEL = "gemini-2.5-flash-lite";
 
 // ── Email ───────────────────────────────────────────────────
-const RECIPIENT_EMAIL = process.env.RECIPIENT_EMAIL || "hongkimjin@gmail.com";
+const RECIPIENT_EMAIL = process.env.RECIPIENT_EMAIL;
 
 // ── Google OAuth ────────────────────────────────────────────
 // These files store Google API credentials and tokens.
@@ -68,6 +68,7 @@ const SCRAPER_RETRY_DELAY_MS = 5_000; // 5 seconds
 function validateConfig() {
   const missing = [];
   if (!GEMINI_API_KEY) missing.push("GEMINI_API_KEY");
+  if (!RECIPIENT_EMAIL) missing.push("RECIPIENT_EMAIL");
 
   if (missing.length > 0) {
     console.error("\n❌ Missing required environment variables:\n");

@@ -1,20 +1,20 @@
-# Dependencies — installed fresh via npm ci in Docker
 node_modules/
 
 # Credentials — injected via Cloud Run env vars at runtime
 google-credentials.json
 google-token.json
 .env
-.env.example
 
-# Dev/test files — not needed in the Docker image
+# Dev/test files
 tests/
 vitest.config.js
-
-# Docs and local files — not needed in the image
 *.log
+*-export-*.md
+
+# Docs and repo metadata
 *.md
 .git/
 .gitignore
 .gcloudignore
+.dockerignore
 implementation_plan.md

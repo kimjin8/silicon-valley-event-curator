@@ -32,6 +32,7 @@ const {
   FALLBACK_MODEL,
   STABLE_FALLBACK_MODEL,
 } = require("./config");
+const userConfig = require("../user-config");
 
 /**
  * Build the curation prompt.
@@ -46,7 +47,17 @@ const {
  * @returns {string} The complete prompt text
  */
 function buildCurationPrompt(mergedData) {
-  return `You are an event curator for a tech professional in the San Francisco Bay Area. You receive raw event data from 3 sources (Cerebral Valley, Luma SF, SF IRL) plus the user's Google Calendar (busy events only) for the upcoming week.
+  const { region, interests, schedule, cost } = userConfig;
+
+  const includeList = interests.include.join(", ");
+  const excludeList = interests.exclude.join(", ");
+  const blockedEveningsList = schedule.blockedEvenings.join(", ");
+  const allowedEvenings = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+    .filter((d) => !schedule.blockedEvenings.includes(d))
+    .join(", ");
+  const priceExceptionsList = cost.priceExceptions.join(", ");
+
+  return `You are an event curator for a tech professional in the ${region}. You receive raw event data from 3 sources (Cerebral Valley, Luma SF, SF IRL) plus the user's Google Calendar (busy events only) for the upcoming week.
 
 Your job is to filter and rank events, then output a beautifully formatted HTML email.
 
@@ -56,21 +67,21 @@ ${JSON.stringify(mergedData, null, 2)}
 ## FILTERING RULES
 
 ### Interest Filter
-INCLUDE events about: AI, consumer hardware, startups, founders, entrepreneurship, product launches, demo days, consumer tech.
-EXCLUDE events about: Healthcare, HR, Finance, AI infrastructure, highly technical engineering (kernel development, inference optimization, CUDA programming, compiler optimization).
+INCLUDE events about: ${includeList}.
+EXCLUDE events about: ${excludeList}.
 
 ### Schedule Filter (Pacific Time)
 The user has a strict location/day preference:
-- WEEKDAYS (Mon through Fri): ONLY South Bay events are allowed. REJECT any SF/San Francisco weekday events.
-- WEEKENDS (Sat and Sun): SF/San Francisco events are allowed.
-- WEEKDAY EVENINGS: Only Monday, Tuesday, Thursday, and Friday evenings. REJECT all Wednesday evening events entirely.
+- WEEKDAYS (Mon through Fri): ONLY ${schedule.weekdayRegion} events are allowed. REJECT any ${schedule.weekendRegion}/San Francisco weekday events.
+- WEEKENDS (Sat and Sun): ${schedule.weekendRegion}/San Francisco events are allowed.
+- WEEKDAY EVENINGS: Only ${allowedEvenings} evenings. REJECT all ${blockedEveningsList} evening events entirely.
 - Cross-reference with the user's Google Calendar busy events provided. EXCLUDE any event that conflicts with an existing busy calendar event (overlapping times).
 
 To be clear: if an event is in San Francisco and falls on a Monday through Friday, it must be EXCLUDED regardless of how good a fit it is.
 
 ### Cost Filter
-- Include events under $50
-- EXCEPTIONS (allow any price): Events featuring top hardware founders, prominent AI researchers, tech executives, intimate networking dinners, premium specialty coffee tech events, Q-Grader networking events
+- Include events under $${cost.maxPriceUSD}
+- EXCEPTIONS (allow any price): Events featuring ${priceExceptionsList}
 - Free events are always welcome
 
 ## OUTPUT FORMAT
@@ -83,9 +94,9 @@ Generate a self-contained HTML email body (no html, head, or body tags needed, j
 ### 1. Header Section
 - Dark navy background (#1a1a2e) with rounded corners
 - Subtitle "YOUR WEEKLY CURATOR" in light gray uppercase letter-spacing
-- Main title "📅 Bay Area Tech Events" in white, large bold font
+- Main title "📅 ${region} Tech Events" in white, large bold font
 - Date range below in coral/orange (#ff6b6b) (e.g., "Week of March 23 – 29, 2026")
-- Preference reminder: "📍 Weekday preference: South Bay only | 🚫 No Wednesday evenings" in a semi-transparent pill
+- Preference reminder: "📍 Weekday preference: ${schedule.weekdayRegion} only | 🚫 No ${blockedEveningsList} evenings" in a semi-transparent pill
 
 ### 2. Note Section (if applicable)
 - Warm amber background (#fff3cd) with left border accent
@@ -194,12 +205,27 @@ async function curateEventsWithAI(mergedData) {
         .replace(/\n?```$/i, "")
         .trim();
 
-      // Log token usage for cost tracking
+      // Log token usage and finish reason for debugging
       const usage = response.usageMetadata;
+      const candidate = response.candidates && response.candidates[0];
+      const finishReason = candidate ? candidate.finishReason : "UNKNOWN";
+
       if (usage) {
         console.log(
-          `   📊 Tokens used — input: ${usage.promptTokenCount}, output: ${usage.candidatesTokenCount}`
+          `   📊 Tokens — input: ${usage.promptTokenCount}, output: ${usage.candidatesTokenCount}, thinking: ${usage.thoughtsTokenCount || 0}, finish: ${finishReason}`
         );
+      }
+
+      // If the model stopped for any reason other than natural completion,
+      // the HTML is likely truncated — fall back to the next model
+      if (finishReason !== "STOP") {
+        const reason = `Output truncated (finishReason: ${finishReason}, ${html.length} chars)`;
+        console.error(`   ⚠ ${label}: ${reason}`);
+        if (i === models.length - 1) {
+          throw new Error("All AI models produced truncated output.\nLast: " + reason);
+        }
+        console.log("   ⚠ Falling back to next model...");
+        continue;
       }
 
       console.log(`✅ AI curation complete (${html.length} chars of HTML)`);

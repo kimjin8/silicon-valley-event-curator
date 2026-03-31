@@ -1,90 +1,131 @@
-# Weekly Startup Events Curator
+# Silicon Valley Event Curator
 
-An automated pipeline that curates Bay Area tech events and delivers a personalized weekly email digest, powered by Gemini AI.
+An automated pipeline that scrapes Bay Area tech events, filters them with Gemini AI against your interests and schedule, and emails you a weekly HTML digest every Monday morning.
+
+**Sources**: Cerebral Valley · Luma SF · SF IRL · your Google Calendar
+
+---
 
 ## Quick Start
 
 ### Prerequisites
-- Node.js 18+ ([download](https://nodejs.org))
-- A Google Cloud project with Calendar & Gmail APIs enabled
-- A Gemini API key ([get one](https://aistudio.google.com/apikey))
 
-### 1. Install Dependencies
+- Node.js 18+ ([download](https://nodejs.org))
+- A [Gemini API key](https://aistudio.google.com/apikey) (free tier is sufficient)
+- A Google Cloud project with **Calendar API** and **Gmail API** enabled
+
+### 1. Install dependencies
+
 ```bash
 npm install
 npx playwright install chromium
 ```
 
-### 2. Configure Environment
+### 2. Configure your preferences
+
+Open [user-config.js](user-config.js) and edit the three sections:
+
+- **Interests** — topics to include or exclude
+- **Schedule** — which days/regions work for you, which evenings to block
+- **Cost** — price ceiling and speaker exceptions
+
+### 3. Set up secrets
+
 ```bash
 cp .env.example .env
-# Edit .env and add your GEMINI_API_KEY
 ```
 
-### 3. Set Up Google Authorization
-Place your `google-credentials.json` (from Google Cloud Console) in the project root, then:
+Open `.env` and fill in your Gemini API key and recipient email address.
+
+### 4. Authorize Google
+
+Download `google-credentials.json` from your Google Cloud Console (OAuth 2.0 Client ID), place it in the project root, then run:
+
 ```bash
 node index.js --auth
 ```
-This opens a browser for Google login. You'll only need to do this once.
 
-### 4. Run
+This opens a browser for Google login. You only need to do this once — the token is saved automatically.
+
+### 5. Run
+
 ```bash
-# Test run (doesn't send email, prints HTML to console)
-node index.js --dry-run
+# Test run — prints the HTML digest to the console, no email sent
+npm run dry-run
 
-# Full run (sends email)
-node index.js
-
-# Scheduled mode (runs every Monday at 10am)
-TZ=America/Los_Angeles node index.js --cron
+# Full run — curates and emails your digest
+npm start
 ```
+
+---
+
+## Customize
+
+All personalization lives in **[user-config.js](user-config.js)**. It's the only file you need to touch to make this curator your own:
+
+```js
+module.exports = {
+  region: "San Francisco Bay Area",   // ← your area
+  interests: {
+    include: ["AI", "startups", ...], // ← topics you want
+    exclude: ["Healthcare", ...],     // ← topics to skip
+  },
+  schedule: {
+    weekdayRegion: "South Bay",       // ← where you can go Mon–Fri
+    weekendRegion: "SF",              // ← where you can go on weekends
+    blockedEvenings: ["Wednesday"],   // ← evenings to skip entirely
+  },
+  cost: {
+    maxPriceUSD: 50,                  // ← price ceiling
+    priceExceptions: [...],           // ← speaker types that bypass the limit
+  },
+};
+```
+
+Secrets (API keys, email) go in `.env` — see [.env.example](.env.example).
+
+---
 
 ## Commands
 
-| Command | What It Does |
+| Command | What it does |
 |---------|-------------|
-| `npm start` | Run the full pipeline once |
-| `npm run dry-run` | Run without sending email |
+| `npm start` | Run the full pipeline once (scrape → curate → email) |
+| `npm run dry-run` | Run without sending email (prints HTML to console) |
 | `npm run auth` | Google OAuth setup |
 | `npm test` | Run all tests |
 | `npm run test:watch` | Run tests in watch mode |
 
-## Project Structure
-```
-├── index.js              # Entry point & orchestration
-├── src/
-│   ├── config.js          # Configuration & env vars
-│   ├── auth.js            # Google OAuth2
-│   ├── scrapers/
-│   │   ├── cerebral-valley.js
-│   │   ├── luma-sf.js
-│   │   └── sf-irl.js
-│   ├── calendar.js        # Google Calendar integration
-│   ├── curator.js         # Gemini AI curation
-│   └── email.js           # Gmail sending
-├── tests/                 # Automated tests
-├── PRD.md                 # Product requirements
-├── Dockerfile             # For Cloud Run deployment
-└── .env.example           # Environment variable template
-```
+---
 
 ## How It Works
 
-1. **Scrape** events from Cerebral Valley, Luma SF, and SF IRL (in parallel)
-2. **Fetch** your Google Calendar for the upcoming week
-3. **Filter** calendar to only busy events
-4. **Merge** all data and send to Gemini AI
-5. **AI curates** events based on your interests, schedule, and cost preferences
-6. **Email** the HTML digest to your inbox
+1. **Scrape** — Cerebral Valley, Luma SF, and SF IRL are scraped in parallel using headless Chromium
+2. **Calendar** — Your Google Calendar is fetched to find existing busy events for the week
+3. **Merge** — All event data and calendar context are combined into a single payload
+4. **Curate** — Gemini AI applies your interest, schedule, and cost rules from `user-config.js`
+5. **Email** — A styled HTML digest is sent to your inbox via Gmail
 
-## Google Cloud Deployment
+If a scraper fails, the pipeline continues with the remaining sources. It only aborts if all three fail.
 
-See the [Implementation Plan](implementation_plan.md) for the full 13-step GCP setup guide covering Cloud Run Jobs and Cloud Scheduler.
+---
+
+## Deploy to Google Cloud (optional)
+
+To run this automatically every Monday at 10 AM PT without leaving your computer on:
+
+1. Build and push the Docker image to Google Artifact Registry
+2. Create a Cloud Run Job pointing to the image
+3. Set environment variables (`GEMINI_API_KEY`, `RECIPIENT_EMAIL`) on the job
+4. Create a Cloud Scheduler trigger: `0 10 * * 1` (timezone: `America/Los_Angeles`)
+
+Estimated cost: **$0.00–$0.12/month** (well within free tier).
+
+---
 
 ## Environment Variables
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `GEMINI_API_KEY` | Yes | Gemini API key from aistudio.google.com |
-| `RECIPIENT_EMAIL` | No | Email recipient (default: hongkimjin@gmail.com) |
+| `GEMINI_API_KEY` | Yes | From [aistudio.google.com/apikey](https://aistudio.google.com/apikey) |
+| `RECIPIENT_EMAIL` | Yes | Email address to receive the weekly digest |
