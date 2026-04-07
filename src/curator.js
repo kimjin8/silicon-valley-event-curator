@@ -31,6 +31,7 @@ const {
   PRIMARY_MODEL,
   FALLBACK_MODEL,
   STABLE_FALLBACK_MODEL,
+  AI_REQUEST_TIMEOUT_MS,
 } = require("./config");
 const userConfig = require("../user-config");
 
@@ -193,8 +194,17 @@ async function curateEventsWithAI(mergedData) {
         generationConfig,
       });
 
-      // Send the prompt and get the response
-      const result = await model.generateContent(prompt);
+      // Send the prompt with a timeout so we fall back quickly
+      // instead of hanging for 5+ minutes on an unresponsive model
+      const result = await Promise.race([
+        model.generateContent(prompt),
+        new Promise((_, reject) =>
+          setTimeout(
+            () => reject(new Error(`Gemini request timed out after ${AI_REQUEST_TIMEOUT_MS / 1000}s`)),
+            AI_REQUEST_TIMEOUT_MS
+          )
+        ),
+      ]);
       const response = await result.response;
       const text = response.text();
 

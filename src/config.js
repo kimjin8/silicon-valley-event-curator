@@ -60,6 +60,11 @@ const SCRAPER_MAX_RETRIES = 2;
 // How long to wait between retries (in milliseconds)
 const SCRAPER_RETRY_DELAY_MS = 5_000; // 5 seconds
 
+// ── AI Settings ─────────────────────────────────────────────
+// How long to wait for the Gemini API to respond before falling
+// back to the next model (in milliseconds)
+const AI_REQUEST_TIMEOUT_MS = 120_000; // 120 seconds
+
 // ── Validation ──────────────────────────────────────────────
 // Check that required environment variables are set. If any are
 // missing, the program fails immediately with a clear error
@@ -93,5 +98,6 @@ module.exports = {
   SCRAPER_TIMEOUT_MS,
   SCRAPER_MAX_RETRIES,
   SCRAPER_RETRY_DELAY_MS,
+  AI_REQUEST_TIMEOUT_MS,
   validateConfig,
 };

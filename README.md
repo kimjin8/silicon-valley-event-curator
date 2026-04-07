@@ -123,6 +123,50 @@ Estimated cost: **$0.00–$0.12/month** (well within free tier).
 
 ---
 
+## Self-Healing with Claude Code (optional)
+
+If you use [Claude Code](https://claude.ai/code), you can set up an automated agent that checks if the weekly job succeeded and diagnoses failures.
+
+### How it works
+
+1. A Claude Code **scheduled remote agent** runs 15 minutes after your Monday cron job
+2. It reads the Cloud Run execution logs via `gcloud`
+3. If the job failed, it reads `RUNBOOK.md` to match against known issues and reports the diagnosis
+4. The project's `CLAUDE.md` gives the agent full context on how to diagnose this pipeline
+
+### Setup
+
+```bash
+# Install Claude Code if you haven't already
+# https://claude.ai/code
+
+# Create a scheduled agent that runs every Monday at 10:15 AM PT
+claude schedule create \
+  --name "event-curator-healthcheck" \
+  --schedule "15 10 * * 1" \
+  --timezone "America/Los_Angeles" \
+  --prompt "Check if the startup-event-curator Cloud Run job succeeded in the last 30 minutes. Run: gcloud run jobs executions list --job=startup-event-curator --region=us-west1 --limit=1. If it failed, follow the diagnosis procedure in CLAUDE.md and RUNBOOK.md. Report what went wrong and whether it can be auto-fixed."
+```
+
+To verify it's set up:
+```bash
+claude schedule list
+```
+
+This is **completely optional** — the pipeline works fine without it. It just adds automated diagnosis when things go wrong.
+
+---
+
+## Monitoring & Alerts
+
+The pipeline supports Google Cloud Monitoring alerts. To set up email alerts for job failures:
+
+1. Create a notification channel in [Cloud Monitoring](https://console.cloud.google.com/monitoring/alerting/notifications)
+2. Create an alert policy that matches Cloud Run Job errors
+3. See `RUNBOOK.md` for the full monitoring setup and incident history
+
+---
+
 ## Environment Variables
 
 | Variable | Required | Description |
