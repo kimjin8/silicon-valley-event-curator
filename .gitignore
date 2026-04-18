@@ -13,6 +13,7 @@ google-token.json
 # Personal/internal docs — not for public consumption
 implementation_plan.md
 PRD.md
+PRD-web-platform.md
 
 # Curator export files (generated output)
 *-export-*.md

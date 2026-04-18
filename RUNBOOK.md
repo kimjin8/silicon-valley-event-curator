@@ -95,11 +95,36 @@ gcloud run jobs update startup-event-curator --region=us-west1 \
 
 ---
 
+### INC-005: auth.js regression + silent alerts (2026-04-13)
+
+**Symptom**: Scheduled Monday job failed. No alert email was received. Logs showed:
+```
+ENOENT: no such file or directory, open '/app/google-credentials.json'
+```
+
+**Root cause (crash)**: Local uncommitted changes to `src/auth.js` removed the `GOOGLE_CREDENTIALS_JSON` / `GOOGLE_TOKEN_JSON` env var fallback, replacing it with direct `fs.readFileSync()` calls. Someone ran `gcloud builds submit` from the working directory before committing, deploying the broken version. The container has no credentials files on disk — it relies entirely on env vars.
+
+**Root cause (silent alert)**: The Cloud Monitoring alert condition required `severity>=ERROR`, but Cloud Run logs "Container called exit(1)." at `WARNING` severity. The condition never matched a single log entry simultaneously, so no alert fired.
+
+**Note on token**: The `GOOGLE_TOKEN_JSON` in Cloud Run had `refresh_token_expires_in: 604799` (7 days) in the response payload, but the OAuth app was already published to production mode before the token was generated. Production-mode refresh tokens do not expire on a 7-day cycle — the field is informational only. The token itself was still valid; the crash occurred before any token check.
+
+**Fixes applied**:
+1. Reverted `src/auth.js` to committed version (restored env var fallback) via `git checkout src/auth.js`
+2. Fixed alert policy filter: `severity>=ERROR` → `severity>=WARNING` so "Container called exit(1)." warnings trigger alerts
+3. Rebuilt Docker image and redeployed to Cloud Run
+4. Manually triggered job to send today's email
+
+**Prevention**:
+- Always commit before running `gcloud builds submit` — the build context includes the working tree, not just committed files
+- Alert policy now uses `severity>=WARNING` to catch exit(1) warnings
+
+---
+
 ## Monitoring & Alerts
 
 | What | How |
 |------|-----|
-| Job failure alert | Cloud Monitoring policy "Event Curator Job Failed" — emails hongkimjin@gmail.com on fatal errors, exit(1), or task timeout |
+| Job failure alert | Cloud Monitoring policy "Event Curator Job Failed" — emails hongkimjin@gmail.com on `severity>=WARNING` matching fatal errors, exit(1), or task timeout |
 | Cloud Scheduler status | `gcloud scheduler jobs describe startup-event-curator-weekly --location=us-west1` |
 | Manual job execution | `gcloud run jobs execute startup-event-curator --region=us-west1` |
 
@@ -112,6 +137,7 @@ gcloud run jobs update startup-event-curator --region=us-west1 \
 | `invalid_grant` | OAuth token expired | Re-auth: `node index.js --auth`, then update Cloud Run env var |
 | `fetch failed` / timeout | Gemini API unresponsive | Automatic fallback handles this; check [Gemini status](https://status.cloud.google.com/) if all 3 fail |
 | `503 Service Unavailable` | Gemini model overloaded | Automatic fallback handles this |
+| `ENOENT: google-credentials.json` | Deployed code missing env var fallback | Revert auth.js to committed version, rebuild Docker image |
 | `Cannot find module` | Missing files in Docker image | Rebuild and push: `gcloud builds submit ...` |
 | `All 3 scrapers failed` | Source websites changed layout | Check each scraper URL manually; update selectors in `src/scrapers/` |
 | `Terminating task...maximum timeout` | Job took too long | Check which step hung in logs; likely Gemini API (see INC-004) |

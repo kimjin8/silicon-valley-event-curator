@@ -33,6 +33,7 @@ When asked to diagnose a failure, follow this procedure:
    - `fetch failed` / timeout → Gemini API unresponsive (INC-004)
    - `503 Service Unavailable` → Gemini overloaded (INC-004)
    - `finishReason` not `STOP` → truncated output (INC-001)
+   - `ENOENT: google-credentials.json` → deployed code missing env var fallback (INC-005)
    - `Cannot find module` → missing files in Docker image
    - `All 3 scrapers failed` → source websites changed
 
