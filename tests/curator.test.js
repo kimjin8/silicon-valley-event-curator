@@ -49,7 +49,14 @@ describe("buildCurationPrompt", () => {
     const prompt = buildCurationPrompt(sampleMergedData);
     expect(prompt).toContain("WEEKDAYS");
     expect(prompt).toContain("South Bay");
-    expect(prompt).toContain("Wednesday evening");
+    expect(prompt).toContain("Wednesday");
+    expect(prompt).toContain("Also On Your Radar");
+  });
+
+  it("should include availability based on user config", () => {
+    const prompt = buildCurationPrompt(sampleMergedData);
+    // user-config has availability: "all-day"
+    expect(prompt).toContain("Available all day");
   });
 
   it("should include cost filtering rules", () => {

@@ -7,7 +7,7 @@ This is a Node.js pipeline that scrapes Bay Area tech events, curates with Gemin
 - `index.js` — entry point and orchestration
 - `src/config.js` — env vars, model names, scraper settings
 - `src/curator.js` — Gemini AI prompt + fallback chain
-- `src/scrapers/` — cerebral-valley.js, luma-sf.js, sf-irl.js
+- `src/scrapers/` — cerebral-valley.js, luma-sf.js, sf-irl.js, utils.js (shared retry/browser logic)
 - `src/calendar.js` — Google Calendar fetch
 - `src/email.js` — Gmail sender
 - `user-config.js` — user preferences (interests, schedule, cost)

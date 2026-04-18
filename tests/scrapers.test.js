@@ -2,18 +2,14 @@
 // scrapers.test.js — Tests for scraper modules
 // ============================================================
 //
-// These tests verify the scraper logic WITHOUT actually visiting
-// real websites. We use "mocks" — fake versions of the browser
-// that return predetermined content. This makes tests:
-//   - Fast (no network requests)
-//   - Reliable (no dependency on external websites)
-//   - Repeatable (same result every time)
+// These tests verify scraper logic WITHOUT visiting real websites.
+// We test URL validation, return format contracts, and the shared
+// retry utility.
 // ============================================================
-// Vitest globals (describe, it, expect) are available automatically
+
+const { isListingPageUrl } = require("../src/scrapers/luma-sf");
 
 // ── Luma Link Validation Tests ──────────────────────────────
-// These are critical: we need to ensure that Luma event links
-// point to individual event pages, NOT the generic listing page.
 
 describe("Luma SF link validation", () => {
   it("should accept valid individual event links", () => {
@@ -24,17 +20,24 @@ describe("Luma SF link validation", () => {
     ];
 
     for (const link of validLinks) {
-      expect(link).not.toBe("https://lu.ma/sf");
-      expect(link).not.toBe("https://lu.ma/sf/");
+      expect(isListingPageUrl(link)).toBe(false);
       expect(link.startsWith("https://lu.ma/")).toBe(true);
-      expect(link.includes("/sf")).toBe(false);
     }
   });
 
   it("should reject the generic listing page URL", () => {
-    const listingUrl = "https://lu.ma/sf";
-    expect(listingUrl).toBe("https://lu.ma/sf");
-    // Our scraper filters these out
+    expect(isListingPageUrl("https://lu.ma/sf")).toBe(true);
+    expect(isListingPageUrl("https://lu.ma/sf/")).toBe(true);
+  });
+
+  it("should reject URLs ending with /sf", () => {
+    expect(isListingPageUrl("https://example.com/sf")).toBe(true);
+    expect(isListingPageUrl("https://example.com/sf/")).toBe(true);
+  });
+
+  it("should accept URLs that contain 'sf' but don't end with /sf", () => {
+    expect(isListingPageUrl("https://lu.ma/sf-ai-meetup")).toBe(false);
+    expect(isListingPageUrl("https://lu.ma/sfirl-happy-hour")).toBe(false);
   });
 
   it("should reject system URLs (login, signup, etc.)", () => {
@@ -81,7 +84,6 @@ describe("SF IRL article URL patterns", () => {
 
 describe("Scraper return format", () => {
   it("should always return an object with source and raw fields", () => {
-    // Simulate successful scraper output
     const successResult = { source: "Cerebral Valley", raw: "Event data here" };
     expect(successResult).toHaveProperty("source");
     expect(successResult).toHaveProperty("raw");
@@ -118,5 +120,22 @@ describe("Scraper return format", () => {
     };
     expect(sfIrlResult).toHaveProperty("articleUrl");
     expect(sfIrlResult.articleUrl).toContain("beehiiv.com/p/");
+  });
+});
+
+// ── withBrowserRetry Tests ──────────────────────────────────
+
+describe("withBrowserRetry", () => {
+  // We can't easily test browser launching in unit tests, but we can
+  // verify the retry/error contract by testing the module exports exist
+  it("should export withBrowserRetry from utils", () => {
+    const { withBrowserRetry } = require("../src/scrapers/utils");
+    expect(typeof withBrowserRetry).toBe("function");
+  });
+
+  it("should export BROWSER_LAUNCH_OPTIONS from utils", () => {
+    const { BROWSER_LAUNCH_OPTIONS } = require("../src/scrapers/utils");
+    expect(BROWSER_LAUNCH_OPTIONS).toHaveProperty("headless", true);
+    expect(BROWSER_LAUNCH_OPTIONS.args).toContain("--no-sandbox");
   });
 });
