@@ -46,8 +46,12 @@ module.exports = {
   // Controls which events are geographically reachable for you
   // on each part of the week, and which evenings to skip.
   schedule: {
-    // On weekdays (Mon–Fri), only events in this area are included.
-    // Events in other cities (e.g. SF) on weekdays are excluded.
+    // "all-day" = available daytime + evening (e.g. full-time founder)
+    // "evening-only" = available evenings only (e.g. has a day job)
+    availability: "all-day",
+
+    // On weekdays (Mon–Fri), events in this area are shortlisted.
+    // Events in other cities (e.g. SF) on weekdays go to "Also On Your Radar".
     weekdayRegion: "South Bay",
 
     // On weekends (Sat–Sun), events in this area are also allowed.

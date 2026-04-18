@@ -72,13 +72,14 @@ INCLUDE events about: ${includeList}.
 EXCLUDE events about: ${excludeList}.
 
 ### Schedule Filter (Pacific Time)
-The user has a strict location/day preference:
-- WEEKDAYS (Mon through Fri): ONLY ${schedule.weekdayRegion} events are allowed. REJECT any ${schedule.weekendRegion}/San Francisco weekday events.
-- WEEKENDS (Sat and Sun): ${schedule.weekendRegion}/San Francisco events are allowed.
+The user's availability: ${schedule.availability === 'all-day' ? 'Available all day (daytime and evening)' : 'Available evenings only (has a day job)'}.
+The user has a location/day preference:
+- WEEKDAYS (Mon through Fri): PREFER ${schedule.weekdayRegion} events — shortlist these. ${schedule.weekendRegion}/San Francisco weekday events should NOT be shortlisted; instead, place them in "Also On Your Radar" with a "SF on Weekday" badge.
+- WEEKENDS (Sat and Sun): ${schedule.weekendRegion}/San Francisco events are allowed and should be shortlisted normally.
 - WEEKDAY EVENINGS: Only ${allowedEvenings} evenings. REJECT all ${blockedEveningsList} evening events entirely.
 - Cross-reference with the user's Google Calendar busy events provided. EXCLUDE any event that conflicts with an existing busy calendar event (overlapping times).
 
-To be clear: if an event is in San Francisco and falls on a Monday through Friday, it must be EXCLUDED regardless of how good a fit it is.
+Important: SF weekday events belong in "Also On Your Radar" (not shortlisted), but the user CAN attend them — highlight compelling ones prominently in that section.
 
 ### Cost Filter
 - Include events under $${cost.maxPriceUSD}
@@ -97,7 +98,7 @@ Generate a self-contained HTML email body (no html, head, or body tags needed, j
 - Subtitle "YOUR WEEKLY CURATOR" in light gray uppercase letter-spacing
 - Main title "📅 ${region} Tech Events" in white, large bold font
 - Date range below in coral/orange (#ff6b6b) (e.g., "Week of March 23 – 29, 2026")
-- Preference reminder: "📍 Weekday preference: ${schedule.weekdayRegion} only | 🚫 No ${blockedEveningsList} evenings" in a semi-transparent pill
+- Preference reminder: "📍 Weekday preference: ${schedule.weekdayRegion} (SF on radar) | 🚫 No ${blockedEveningsList} evenings" in a semi-transparent pill
 
 ### 2. Note Section (if applicable)
 - Warm amber background (#fff3cd) with left border accent
