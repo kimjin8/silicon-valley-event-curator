@@ -19,3 +19,6 @@ TASKS.md
 
 # Curator export files (generated output)
 *-export-*.md
+
+# Per-run diagnostic artifacts (scraped events + AI prompt/response snapshots)
+runs/

@@ -24,6 +24,8 @@ process.stdout.write("Checking environment...\n");
 // Load environment variables from .env file BEFORE anything else
 require("dotenv").config();
 
+const fs = require("fs");
+const path = require("path");
 const cron = require("node-cron");
 const { validateConfig } = require("./src/config");
 const { getGoogleAuthClient, authenticateGoogle } = require("./src/auth");
@@ -33,6 +35,28 @@ const { scrapeSFIRL } = require("./src/scrapers/sf-irl");
 const { getCalendarEvents, filterBusyEvents } = require("./src/calendar");
 const { curateEventsWithAI } = require("./src/curator");
 const { sendEmail } = require("./src/email");
+
+/**
+ * Persist a full snapshot of one pipeline run for post-hoc diagnosis.
+ * Writes runs/<ISO-timestamp>.json containing scraped events, calendar,
+ * the exact prompt sent to Gemini, and the raw HTML returned.
+ *
+ * Returns the artifact path, or null if writing failed (non-fatal — we
+ * never want tracing to break a real run).
+ */
+function writeRunArtifact(artifact) {
+  try {
+    const runsDir = path.join(__dirname, "runs");
+    if (!fs.existsSync(runsDir)) fs.mkdirSync(runsDir, { recursive: true });
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const file = path.join(runsDir, `${stamp}.json`);
+    fs.writeFileSync(file, JSON.stringify(artifact, null, 2));
+    return file;
+  } catch (err) {
+    console.error("⚠ Failed to write run artifact:", err.message);
+    return null;
+  }
+}
 
 /**
  * Calculate the date range for the upcoming week.
@@ -122,7 +146,36 @@ async function runWorkflow({ dryRun = false } = {}) {
   console.log();
 
   // Step 6: AI curation
-  const htmlEmail = await curateEventsWithAI(mergedData);
+  const { html: htmlEmail, prompt, modelUsed, finishReason, usage, attempts } =
+    await curateEventsWithAI(mergedData);
+
+  // Persist a full run artifact for post-hoc diagnosis.
+  // Written BEFORE email send so a send failure still leaves a trace.
+  const artifactPath = writeRunArtifact({
+    runAt: new Date().toISOString(),
+    dryRun,
+    dateRange,
+    sources: {
+      cerebralValley,
+      lumaSF,
+      sfIrl,
+    },
+    calendar: {
+      totalEvents: calendarEvents.length,
+      busyEvents,
+    },
+    ai: {
+      prompt,
+      promptChars: prompt.length,
+      modelUsed,
+      finishReason,
+      usage,
+      attempts,
+      html: htmlEmail,
+      htmlChars: htmlEmail.length,
+    },
+  });
+  if (artifactPath) console.log(`📝 Run artifact: ${artifactPath}`);
 
   // Step 7: Send email (or print in dry-run mode)
   if (dryRun) {

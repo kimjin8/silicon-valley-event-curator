@@ -34,6 +34,7 @@ const {
   AI_REQUEST_TIMEOUT_MS,
 } = require("./config");
 const userConfig = require("../user-config");
+const { validateCurationOutput } = require("./validator");
 
 /**
  * Build the curation prompt.
@@ -86,6 +87,13 @@ Important: SF weekday events belong in "Also On Your Radar" (not shortlisted), b
 - EXCEPTIONS (allow any price): Events featuring ${priceExceptionsList}
 - Free events are always welcome
 
+## CRITICAL DATA ACCURACY RULES
+- Each event has pre-computed fields: dayOfWeek, datePT, startTimePT, endTimePT, and source. USE THESE EXACTLY AS PROVIDED.
+- Do NOT compute day-of-week yourself — use the dayOfWeek field from the data.
+- Do NOT convert timestamps from UTC — use startTimePT and endTimePT which are already in Pacific Time.
+- Do NOT guess the source — use the source field from each event ("Cerebral Valley", "Luma SF", or "SF IRL").
+- Show event duration as "startTimePT – endTimePT" (e.g., "4:00 PM – 6:30 PM"), not just the start time.
+
 ## OUTPUT FORMAT
 Generate ONLY raw HTML content. Do NOT wrap in markdown code fences. Do NOT include any text before or after the HTML. Start your response directly with the opening div tag.
 
@@ -110,14 +118,15 @@ Generate a self-contained HTML email body (no html, head, or body tags needed, j
 - Each event is a card with white background, subtle border, border-radius
 
 ### 4. Event Card Design (for each shortlisted event)
-- **Date badge line**: Day + date in coral (#e74c3c) uppercase bold (e.g., "TUESDAY · MAR 24"), followed by cost badge ("FREE" in green background, or price)
+- **Date badge line**: Day + date in coral (#e74c3c) uppercase bold (e.g., "SATURDAY · APR 18"), followed by cost badge ("FREE" in green background, or price) with margin-left: 8px for spacing
+- **IMPORTANT**: Use the event's dayOfWeek and datePT fields for the date badge — do NOT calculate the day name yourself
 - **Special badges** if applicable: "FREE + 🍺 Open Bar" in green when relevant
 - **Event name**: Large bold text, linked to registration URL
-- **Time and location line**: "⏰ 5:30 PM | 📍 Location Name" with a "South Bay ✅" or "SF" badge (pill-style)
+- **Time and location line**: "⏰ 4:00 PM – 6:30 PM | 📍 Location Name" using startTimePT and endTimePT, with a "South Bay ✅" or "SF" badge (pill-style, margin-left: 8px)
 - **Description**: 2-3 sentence summary
 - **Tags row**: Colored pill badges for categories:
   - 🤖 AI (blue), 🚀 Startups (purple), 🎨 Product (orange), 👥 Founders (teal), 🔥 Free (green)
-  - Include "Source: Luma SF" or "Source: Cerebral Valley" or "Source: SF IRL" at the end
+  - Include "Source: {source}" using each event's source field (e.g., "Source: Luma SF" or "Source: Cerebral Valley")
 - **Register button**: Coral/orange (#e74c3c) rounded button with white text: "Register on Luma →" or "Register →"
   - IMPORTANT: The button MUST link to the specific event registration page, NOT to a general listing page. Use the individual event URLs from the Luma events data.
 
@@ -130,7 +139,7 @@ Generate a self-contained HTML email body (no html, head, or body tags needed, j
 ### 6. "Also On Your Radar" Section
 - Header: "✨ ALSO ON YOUR RADAR" in uppercase with sparkle emoji
 - Subtitle: "(Great interest match — excluded by schedule/location rules)"
-- For each excluded event: 🔥 emoji + event name in bold + reason badge (e.g., "SF on Weekday" in red pill)
+- For each excluded event: Day + date in coral uppercase bold (e.g., "MONDAY · APR 20") + reason badge (e.g., "SF on Weekday" in red pill, margin-left: 8px)
 - Below: date range, time, location, source info
 - Brief note explaining why it would be a strong pick but was excluded
 
@@ -151,7 +160,7 @@ If no events pass the filters, say so politely and suggest checking back next we
  * error, etc.), automatically falls back to the secondary model.
  *
  * @param {object} mergedData - Combined data from all sources
- * @returns {Promise<string>} Generated HTML email content
+ * @returns {Promise<{html: string, prompt: string, modelUsed: string, finishReason: string, usage: object|null, attempts: Array}>}
  * @throws {Error} If both primary and fallback models fail
  */
 async function curateEventsWithAI(mergedData) {
@@ -169,6 +178,8 @@ async function curateEventsWithAI(mergedData) {
     { name: FALLBACK_MODEL, label: "Gemini 3.1 Flash Lite (fallback)" },
     { name: STABLE_FALLBACK_MODEL, label: "Gemini 2.5 Flash Lite (stable fallback)" },
   ];
+
+  const attempts = [];
 
   for (let i = 0; i < models.length; i++) {
     const { name, label } = models[i];
@@ -232,6 +243,7 @@ async function curateEventsWithAI(mergedData) {
       if (finishReason !== "STOP") {
         const reason = `Output truncated (finishReason: ${finishReason}, ${html.length} chars)`;
         console.error(`   ⚠ ${label}: ${reason}`);
+        attempts.push({ model: name, label, outcome: "truncated", finishReason, usage: usage || null });
         if (i === models.length - 1) {
           throw new Error("All AI models produced truncated output.\nLast: " + reason);
         }
@@ -239,10 +251,44 @@ async function curateEventsWithAI(mergedData) {
         continue;
       }
 
+      // Validate: catch clean-STOP-but-garbage outputs (hallucinated URLs,
+      // dropped-all-events). Advances the fallback chain on quality signals,
+      // not just truncation/error.
+      const validation = validateCurationOutput(html, mergedData);
+      if (!validation.ok) {
+        const reason = `Validation failed: ${validation.reasons.join("; ")}`;
+        console.error(`   ⚠ ${label}: ${reason}`);
+        console.error(`     stats:`, validation.stats);
+        attempts.push({
+          model: name,
+          label,
+          outcome: "invalid",
+          reasons: validation.reasons,
+          stats: validation.stats,
+          finishReason,
+          usage: usage || null,
+        });
+        if (i === models.length - 1) {
+          throw new Error("All AI models produced invalid output.\nLast: " + reason);
+        }
+        console.log("   ⚠ Falling back to next model...");
+        continue;
+      }
+
       console.log(`✅ AI curation complete (${html.length} chars of HTML)`);
-      return html;
+      console.log(`   📋 Validation passed:`, validation.stats);
+      attempts.push({
+        model: name,
+        label,
+        outcome: "success",
+        finishReason,
+        usage: usage || null,
+        stats: validation.stats,
+      });
+      return { html, prompt, modelUsed: name, finishReason, usage: usage || null, attempts };
     } catch (err) {
       console.error(`   ❌ ${label} failed:`, err.message);
+      attempts.push({ model: name, label, outcome: "error", error: err.message });
 
       // If this was the last model, throw the error
       if (i === models.length - 1) {

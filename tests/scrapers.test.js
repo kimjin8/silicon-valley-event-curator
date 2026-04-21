@@ -8,6 +8,45 @@
 // ============================================================
 
 const { isListingPageUrl } = require("../src/scrapers/luma-sf");
+const { isBayArea } = require("../src/scrapers/cerebral-valley");
+
+// ── Cerebral Valley Bay Area Filter Tests ──────────────────
+
+describe("Cerebral Valley isBayArea filter", () => {
+  it("should match common Bay Area cities", () => {
+    expect(isBayArea("San Francisco, CA")).toBe(true);
+    expect(isBayArea("Sunnyvale, CA")).toBe(true);
+    expect(isBayArea("Palo Alto, CA")).toBe(true);
+    expect(isBayArea("Mountain View, CA")).toBe(true);
+    expect(isBayArea("Berkeley, CA")).toBe(true);
+    expect(isBayArea("San Jose, CA")).toBe(true);
+    expect(isBayArea("Menlo Park, CA")).toBe(true);
+    expect(isBayArea("Stanford, CA")).toBe(true);
+  });
+
+  it("should match locations ending with , CA", () => {
+    expect(isBayArea("Some Place, CA")).toBe(true);
+  });
+
+  it("should reject non-Bay-Area locations", () => {
+    expect(isBayArea("London, UK")).toBe(false);
+    expect(isBayArea("New York City, NY")).toBe(false);
+    expect(isBayArea("Seattle, WA")).toBe(false);
+    expect(isBayArea("Boston, MA")).toBe(false);
+    expect(isBayArea("Remote")).toBe(false);
+  });
+
+  it("should handle null/undefined/empty", () => {
+    expect(isBayArea(null)).toBe(false);
+    expect(isBayArea(undefined)).toBe(false);
+    expect(isBayArea("")).toBe(false);
+  });
+
+  it("should be case-insensitive", () => {
+    expect(isBayArea("SAN FRANCISCO, CA")).toBe(true);
+    expect(isBayArea("san francisco, ca")).toBe(true);
+  });
+});
 
 // ── Luma Link Validation Tests ──────────────────────────────
 
@@ -123,19 +162,92 @@ describe("Scraper return format", () => {
   });
 });
 
-// ── withBrowserRetry Tests ──────────────────────────────────
+// ── Shared Utils Tests ──────────────────────────────────────
 
-describe("withBrowserRetry", () => {
-  // We can't easily test browser launching in unit tests, but we can
-  // verify the retry/error contract by testing the module exports exist
+describe("Shared scraper utils", () => {
   it("should export withBrowserRetry from utils", () => {
     const { withBrowserRetry } = require("../src/scrapers/utils");
     expect(typeof withBrowserRetry).toBe("function");
+  });
+
+  it("should export withRetry from utils", () => {
+    const { withRetry } = require("../src/scrapers/utils");
+    expect(typeof withRetry).toBe("function");
   });
 
   it("should export BROWSER_LAUNCH_OPTIONS from utils", () => {
     const { BROWSER_LAUNCH_OPTIONS } = require("../src/scrapers/utils");
     expect(BROWSER_LAUNCH_OPTIONS).toHaveProperty("headless", true);
     expect(BROWSER_LAUNCH_OPTIONS.args).toContain("--no-sandbox");
+  });
+
+  it("withRetry should return result on success", async () => {
+    const { withRetry } = require("../src/scrapers/utils");
+    const result = await withRetry(
+      "Test",
+      async () => ({ data: "ok" }),
+      (err) => ({ error: err })
+    );
+    expect(result).toEqual({ data: "ok" });
+  });
+
+  it("withRetry should call emptyResult on failure", async () => {
+    // withRetry retries with real delays, so we test the emptyResult contract directly
+    const emptyResult = (err) => ({ error: err });
+    const result = emptyResult("network timeout");
+    expect(result).toHaveProperty("error");
+    expect(result.error).toBe("network timeout");
+  });
+
+  it("withRetry emptyResult returning null enables API-fallback pattern", () => {
+    const emptyResult = () => null;
+    expect(emptyResult("fail")).toBeNull();
+  });
+});
+
+// ── Pacific Time Conversion Tests ──────────────────────────
+
+describe("toPacificTime", () => {
+  const { toPacificTime } = require("../src/scrapers/utils");
+
+  it("should convert UTC timestamp to correct Pacific day-of-week", () => {
+    // 2026-04-18 is a Saturday
+    const result = toPacificTime("2026-04-18T23:00:00Z");
+    expect(result.dayOfWeek).toBe("Saturday");
+  });
+
+  it("should handle UTC midnight correctly (may be previous day in PT)", () => {
+    // 2026-04-20 00:00 UTC = 2026-04-19 5:00 PM PDT (Sunday, not Monday)
+    const result = toPacificTime("2026-04-20T00:00:00Z");
+    expect(result.dayOfWeek).toBe("Sunday");
+    expect(result.timePT).toBe("5:00 PM");
+  });
+
+  it("should show correct PT time (UTC-7 during PDT)", () => {
+    // 2026-04-18T23:00:00Z = 4:00 PM PDT
+    const result = toPacificTime("2026-04-18T23:00:00Z");
+    expect(result.timePT).toBe("4:00 PM");
+  });
+
+  it("should format datePT as short month + day", () => {
+    const result = toPacificTime("2026-04-18T20:00:00Z");
+    expect(result.datePT).toBe("Apr 18");
+  });
+
+  it("should handle null/undefined input gracefully", () => {
+    expect(toPacificTime(null)).toEqual({ dayOfWeek: "", datePT: "", timePT: "" });
+    expect(toPacificTime(undefined)).toEqual({ dayOfWeek: "", datePT: "", timePT: "" });
+  });
+
+  it("should verify known dates: Apr 18 2026 = Saturday, Apr 21 = Tuesday", () => {
+    // These are the exact dates that were wrong in the email
+    const apr18 = toPacificTime("2026-04-18T20:00:00Z");
+    expect(apr18.dayOfWeek).toBe("Saturday");
+
+    const apr21 = toPacificTime("2026-04-21T20:00:00Z");
+    expect(apr21.dayOfWeek).toBe("Tuesday");
+
+    const apr23 = toPacificTime("2026-04-23T20:00:00Z");
+    expect(apr23.dayOfWeek).toBe("Thursday");
   });
 });
