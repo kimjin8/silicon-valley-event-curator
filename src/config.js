@@ -18,12 +18,13 @@ const path = require("path");
 require("dotenv").config({ path: path.join(__dirname, "..", ".env") });
 
 // ── Gemini AI ───────────────────────────────────────────────
-// Primary model: Gemini 3 Flash Preview — fast, capable, affordable
-// Fallback model: Gemini 3.1 Flash Lite — used when primary hits rate limits
+// Two-model chain. Each model also gets one corrective-feedback retry
+// inside the curator, so this is up to 4 attempts per run.
+//   Primary:  fast, capable, full-feature model
+//   Fallback: smaller/faster Lite model when primary is unavailable
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const PRIMARY_MODEL = "gemini-3-flash-preview";
 const FALLBACK_MODEL = "gemini-3.1-flash-lite-preview";
-const STABLE_FALLBACK_MODEL = "gemini-2.5-flash-lite";
 
 // ── Email ───────────────────────────────────────────────────
 const RECIPIENT_EMAIL = process.env.RECIPIENT_EMAIL;
@@ -89,7 +90,6 @@ module.exports = {
   GEMINI_API_KEY,
   PRIMARY_MODEL,
   FALLBACK_MODEL,
-  STABLE_FALLBACK_MODEL,
   RECIPIENT_EMAIL,
   GOOGLE_CREDENTIALS_PATH,
   GOOGLE_TOKEN_PATH,

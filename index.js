@@ -34,6 +34,7 @@ const { scrapeLumaSF } = require("./src/scrapers/luma-sf");
 const { scrapeSFIRL } = require("./src/scrapers/sf-irl");
 const { getCalendarEvents, filterBusyEvents } = require("./src/calendar");
 const { curateEventsWithAI } = require("./src/curator");
+const { prefilterMergedData } = require("./src/prefilter");
 const { sendEmail } = require("./src/email");
 
 /**
@@ -59,15 +60,42 @@ function writeRunArtifact(artifact) {
 }
 
 /**
- * Calculate the date range for the upcoming week.
- * @returns {object} Date range with timeMin and timeMax (ISO strings)
+ * Calculate the date range for the upcoming week, plus pre-formatted
+ * Pacific Time labels for the AI to use verbatim. We pre-compute these
+ * because handing the AI raw ISO timestamps and asking it to format them
+ * has been a recurring source of bugs (it interprets UTC as PT after 5pm,
+ * mislabels day-of-week, etc.). The AI just inserts these strings.
+ *
+ * Returns:
+ *   timeMin / timeMax — ISO strings (UTC) for Google Calendar API
+ *   todayPT — "Tuesday, April 28, 2026" (today in PT)
+ *   weekLabelPT — "April 28 – May 5, 2026" (header label in PT)
+ *   weekStartPT — "April 28" (start day, PT)
+ *   weekEndPT — "May 5"   (end day, PT)
  */
 function computeDateRange() {
   const now = new Date();
   const weekFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+  const tz = "America/Los_Angeles";
+  const fullDate = (d) =>
+    d.toLocaleDateString("en-US", {
+      weekday: "long",
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+      timeZone: tz,
+    });
+  const shortDate = (d) =>
+    d.toLocaleDateString("en-US", { month: "long", day: "numeric", timeZone: tz });
+  const yearOf = (d) =>
+    d.toLocaleDateString("en-US", { year: "numeric", timeZone: tz });
   return {
     timeMin: now.toISOString(),
     timeMax: weekFromNow.toISOString(),
+    todayPT: fullDate(now),
+    weekStartPT: shortDate(now),
+    weekEndPT: shortDate(weekFromNow),
+    weekLabelPT: `${shortDate(now)} – ${shortDate(weekFromNow)}, ${yearOf(weekFromNow)}`,
   };
 }
 
@@ -89,7 +117,8 @@ async function runWorkflow({ dryRun = false } = {}) {
 
   // Step 1: Compute date range
   const dateRange = computeDateRange();
-  console.log("📆 Date range:", dateRange.timeMin, "to", dateRange.timeMax);
+  console.log(`📆 Today (PT): ${dateRange.todayPT}`);
+  console.log(`📆 Week label: ${dateRange.weekLabelPT}`);
 
   // Google auth
   let authClient = null;
@@ -126,13 +155,37 @@ async function runWorkflow({ dryRun = false } = {}) {
   }
 
   // Step 5: Merge all data
-  const mergedData = {
-    dateRange: { from: dateRange.timeMin, to: dateRange.timeMax },
+  const rawMergedData = {
+    dateRange: {
+      from: dateRange.timeMin,
+      to: dateRange.timeMax,
+      todayPT: dateRange.todayPT,
+      weekStartPT: dateRange.weekStartPT,
+      weekEndPT: dateRange.weekEndPT,
+      weekLabelPT: dateRange.weekLabelPT,
+    },
     cerebralValleyEvents: cerebralValley,
     lumaSFEvents: lumaSF,
     sfIrlEvents: sfIrl,
     busyCalendarEvents: busyEvents,
   };
+
+  // Pre-filter hard physical invariants (calendar overlap + blocked evenings)
+  // before the AI sees the data. The AI keeps full ownership of judgment
+  // (interest, ranking, region, price) — we just remove events you literally
+  // cannot attend. Validator still runs on the AI's output as a safety net.
+  const { mergedData, prefilterReport } = prefilterMergedData(rawMergedData);
+  console.log(
+    `\n🛡  Pre-filter: dropped ${prefilterReport.droppedCount} un-attendable events ` +
+      `(Luma ${prefilterReport.luma.before}→${prefilterReport.luma.after}, ` +
+      `CV ${prefilterReport.cerebralValley.before}→${prefilterReport.cerebralValley.after})`
+  );
+  prefilterReport.drops.slice(0, 10).forEach((d) => {
+    console.log(`     · ${d.datePT} ${d.startTimePT} — ${d.name} [${d.reason}]`);
+  });
+  if (prefilterReport.drops.length > 10) {
+    console.log(`     · ...and ${prefilterReport.drops.length - 10} more`);
+  }
 
   console.log("\n📊 Merged data ready. Sending to AI for curation...\n");
 
@@ -164,6 +217,7 @@ async function runWorkflow({ dryRun = false } = {}) {
       totalEvents: calendarEvents.length,
       busyEvents,
     },
+    prefilter: prefilterReport,
     ai: {
       prompt,
       promptChars: prompt.length,

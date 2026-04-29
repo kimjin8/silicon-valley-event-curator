@@ -135,4 +135,25 @@ function toPacificTime(isoString) {
   };
 }
 
-module.exports = { sleep, withRetry, withBrowserRetry, scrollToLoadAll, toPacificTime, BROWSER_LAUNCH_OPTIONS, SCRAPER_TIMEOUT_MS };
+/**
+ * Format a start/end time range for display, handling cross-day spans.
+ * Same-day:  "7:00 PM – 9:30 PM"
+ * Multi-day: "Fri 7:00 PM – Sat 3:00 PM"
+ *
+ * Prevents the "Scrappy Founders 7:00 PM – 3:00 PM" overnight bug where
+ * the formatted string is ambiguous about which day each time refers to.
+ */
+function formatTimeRange(startISO, endISO) {
+  const s = toPacificTime(startISO);
+  const e = toPacificTime(endISO);
+  if (!s.timePT && !e.timePT) return "";
+  if (!e.timePT) return s.timePT;
+  if (s.dayOfWeek === e.dayOfWeek && s.datePT === e.datePT) {
+    return `${s.timePT} – ${e.timePT}`;
+  }
+  const sShort = s.dayOfWeek.slice(0, 3);
+  const eShort = e.dayOfWeek.slice(0, 3);
+  return `${sShort} ${s.timePT} – ${eShort} ${e.timePT}`;
+}
+
+module.exports = { sleep, withRetry, withBrowserRetry, scrollToLoadAll, toPacificTime, formatTimeRange, BROWSER_LAUNCH_OPTIONS, SCRAPER_TIMEOUT_MS };

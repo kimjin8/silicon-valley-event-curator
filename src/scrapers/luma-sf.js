@@ -11,7 +11,7 @@
 // ============================================================
 
 const { SCRAPER_URLS, SCRAPER_TIMEOUT_MS } = require("../config");
-const { sleep, withRetry, withBrowserRetry, scrollToLoadAll, toPacificTime } = require("./utils");
+const { sleep, withRetry, withBrowserRetry, scrollToLoadAll, toPacificTime, formatTimeRange } = require("./utils");
 
 const LUMA_API_BASE = "https://api2.luma.com/discover/get-paginated-events";
 const LUMA_SF_PLACE_ID = "discplace-BDj7GNbGlsF7Cka";
@@ -81,6 +81,7 @@ async function fetchFromAPI() {
       datePT: start.datePT,
       startTimePT: start.timePT,
       endTimePT: end.timePT,
+      displayTime: formatTimeRange(e.start_at, evt.end_at),
       location: addr.full_address || addr.short_address || addr.city || null,
       city: addr.city || null,
       isFree: ticket.is_free || false,
@@ -94,7 +95,7 @@ async function fetchFromAPI() {
 
   // Build a text summary for the AI using PT times
   const raw = events
-    .map((e) => `${e.name}\n${e.dayOfWeek} ${e.datePT}, ${e.startTimePT} – ${e.endTimePT} | ${e.location || e.city}\n${e.isFree ? "Free" : e.price || ""}`)
+    .map((e) => `${e.name}\n${e.dayOfWeek} ${e.datePT}, ${e.displayTime} | ${e.location || e.city}\n${e.isFree ? "Free" : e.price || ""}`)
     .join("\n\n");
 
   return { events, raw };

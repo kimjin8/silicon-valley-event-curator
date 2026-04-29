@@ -59,7 +59,9 @@ module.exports = {
 
     // Evening events on these days are excluded entirely.
     // Use full day names: "Monday", "Tuesday", "Wednesday", etc.
-    blockedEvenings: ["Wednesday"],
+    // Empty array = no day-of-week blocks; rely on Google Calendar busy
+    // events (e.g., a recurring small group) to handle blocked evenings.
+    blockedEvenings: [],
   },
 
   // ── Cost Preferences ───────────────────────────────────────

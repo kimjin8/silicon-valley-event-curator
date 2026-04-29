@@ -10,7 +10,7 @@
 // ============================================================
 
 const { SCRAPER_URLS, SCRAPER_TIMEOUT_MS } = require("../config");
-const { sleep, withRetry, withBrowserRetry, scrollToLoadAll, toPacificTime } = require("./utils");
+const { sleep, withRetry, withBrowserRetry, scrollToLoadAll, toPacificTime, formatTimeRange } = require("./utils");
 
 const CV_API_BASE = "https://api.cerebralvalley.ai/v1/public/event/pull";
 
@@ -83,6 +83,7 @@ async function fetchFromAPI() {
       datePT: start.datePT,
       startTimePT: start.timePT,
       endTimePT: end.timePT,
+      displayTime: formatTimeRange(toUTC(e.startDateTime), toUTC(e.endDateTime)),
       location: e.location,
       venue: e.venue || null,
       url: e.url || null,
@@ -93,7 +94,7 @@ async function fetchFromAPI() {
 
   // Build a text summary for the AI using PT times
   const raw = events
-    .map((e) => `${e.name}\n${e.dayOfWeek} ${e.datePT}, ${e.startTimePT} – ${e.endTimePT} | ${e.location}\n${e.description}`)
+    .map((e) => `${e.name}\n${e.dayOfWeek} ${e.datePT}, ${e.displayTime} | ${e.location}\n${e.description}`)
     .join("\n\n");
 
   return { events, raw };

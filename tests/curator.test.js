@@ -49,7 +49,6 @@ describe("buildCurationPrompt", () => {
     const prompt = buildCurationPrompt(sampleMergedData);
     expect(prompt).toContain("WEEKDAYS");
     expect(prompt).toContain("South Bay");
-    expect(prompt).toContain("Wednesday");
     expect(prompt).toContain("Also On Your Radar");
   });
 

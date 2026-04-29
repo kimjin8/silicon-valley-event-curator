@@ -30,7 +30,6 @@ const {
   GEMINI_API_KEY,
   PRIMARY_MODEL,
   FALLBACK_MODEL,
-  STABLE_FALLBACK_MODEL,
   AI_REQUEST_TIMEOUT_MS,
 } = require("./config");
 const userConfig = require("../user-config");
@@ -53,15 +52,21 @@ function buildCurationPrompt(mergedData) {
 
   const includeList = interests.include.join(", ");
   const excludeList = interests.exclude.join(", ");
-  const blockedEveningsList = schedule.blockedEvenings.join(", ");
-  const allowedEvenings = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
-    .filter((d) => !schedule.blockedEvenings.includes(d))
-    .join(", ");
   const priceExceptionsList = cost.priceExceptions.join(", ");
+
+  // Pre-formatted PT labels — use these verbatim, never derive dates from raw timestamps.
+  const todayPT = mergedData?.dateRange?.todayPT || "";
+  const weekLabelPT = mergedData?.dateRange?.weekLabelPT || "";
 
   return `You are an event curator for a tech professional in the ${region}. You receive raw event data from 3 sources (Cerebral Valley, Luma SF, SF IRL) plus the user's Google Calendar (busy events only) for the upcoming week.
 
 Your job is to filter and rank events, then output a beautifully formatted HTML email.
+
+## TODAY (in Pacific Time)
+${todayPT}
+
+## WEEK LABEL FOR HEADER (use verbatim — do not recompute)
+${weekLabelPT}
 
 ## INPUT DATA
 ${JSON.stringify(mergedData, null, 2)}
@@ -75,12 +80,11 @@ EXCLUDE events about: ${excludeList}.
 ### Schedule Filter (Pacific Time)
 The user's availability: ${schedule.availability === 'all-day' ? 'Available all day (daytime and evening)' : 'Available evenings only (has a day job)'}.
 The user has a location/day preference:
-- WEEKDAYS (Mon through Fri): PREFER ${schedule.weekdayRegion} events — shortlist these. ${schedule.weekendRegion}/San Francisco weekday events should NOT be shortlisted; instead, place them in "Also On Your Radar" with a "SF on Weekday" badge.
+- WEEKDAYS (Mon through Fri): ${schedule.weekdayRegion} is the DEFAULT. When ${schedule.weekdayRegion} events of comparable interest exist, prefer them. Shortlist a ${schedule.weekendRegion}/San Francisco weekday event ONLY when (a) it is an exceptionally strong interest match AND (b) there is no comparable ${schedule.weekdayRegion} alternative on the same day. Otherwise place ${schedule.weekendRegion} weekday events in "Also On Your Radar" with a "SF on Weekday" badge. Do NOT shortlist an all-SF lineup when ${schedule.weekdayRegion} options exist.
 - WEEKENDS (Sat and Sun): ${schedule.weekendRegion}/San Francisco events are allowed and should be shortlisted normally.
-- WEEKDAY EVENINGS: Only ${allowedEvenings} evenings. REJECT all ${blockedEveningsList} evening events entirely.
 - Cross-reference with the user's Google Calendar busy events provided. EXCLUDE any event that conflicts with an existing busy calendar event (overlapping times).
 
-Important: SF weekday events belong in "Also On Your Radar" (not shortlisted), but the user CAN attend them — highlight compelling ones prominently in that section.
+Important: a balanced shortlist that includes ${schedule.weekdayRegion} events is the goal. If the input contains qualifying ${schedule.weekdayRegion} events, surface at least one.
 
 ### Cost Filter
 - Include events under $${cost.maxPriceUSD}
@@ -88,11 +92,13 @@ Important: SF weekday events belong in "Also On Your Radar" (not shortlisted), b
 - Free events are always welcome
 
 ## CRITICAL DATA ACCURACY RULES
-- Each event has pre-computed fields: dayOfWeek, datePT, startTimePT, endTimePT, and source. USE THESE EXACTLY AS PROVIDED.
+- Each event has pre-computed fields: dayOfWeek, datePT, startTimePT, endTimePT, displayTime, and source. USE THESE EXACTLY AS PROVIDED.
 - Do NOT compute day-of-week yourself — use the dayOfWeek field from the data.
-- Do NOT convert timestamps from UTC — use startTimePT and endTimePT which are already in Pacific Time.
+- Do NOT convert timestamps from UTC — use the pre-computed PT fields.
 - Do NOT guess the source — use the source field from each event ("Cerebral Valley", "Luma SF", or "SF IRL").
-- Show event duration as "startTimePT – endTimePT" (e.g., "4:00 PM – 6:30 PM"), not just the start time.
+- For event time display, use the displayTime field as-is. It already handles overnight/multi-day events correctly (e.g., "Fri 7:00 PM – Sat 3:00 PM"). Do NOT recompose times yourself.
+- CALENDAR FIDELITY: when describing the user's schedule (e.g., the Note section or Calendar heads-up), use the most SPECIFIC calendar event with a precise time. If a flight has a specific time (e.g., "Flight to Panama" Sunday 8:16 PM), describe departure as Sunday — do NOT infer departure from a multi-day all-day block ("Kim in Panama" starting Monday). Multi-day blocks describe presence, not departure.
+- LOCATION SANITY: only shortlist or surface events physically located in the San Francisco Bay Area (San Francisco, Oakland, Berkeley, Palo Alto, Mountain View, Sunnyvale, San Jose, Stanford, Menlo Park, Redwood City, San Mateo, Cupertino, Santa Clara, Fremont, Hayward, etc.). If the location field shows a city outside the Bay Area (e.g., Reykjavik, NYC, LA, online-only with non-Bay-Area host), DROP the event entirely — do not put it in shortlist or radar. Bad upstream data is not the user's problem.
 
 ## OUTPUT FORMAT
 Generate ONLY raw HTML content. Do NOT wrap in markdown code fences. Do NOT include any text before or after the HTML. Start your response directly with the opening div tag.
@@ -105,8 +111,8 @@ Generate a self-contained HTML email body (no html, head, or body tags needed, j
 - Dark navy background (#1a1a2e) with rounded corners
 - Subtitle "YOUR WEEKLY CURATOR" in light gray uppercase letter-spacing
 - Main title "📅 ${region} Tech Events" in white, large bold font
-- Date range below in coral/orange (#ff6b6b) (e.g., "Week of March 23 – 29, 2026")
-- Preference reminder: "📍 Weekday preference: ${schedule.weekdayRegion} (SF on radar) | 🚫 No ${blockedEveningsList} evenings" in a semi-transparent pill
+- Date range below in coral/orange (#ff6b6b): use the format "Week of ${weekLabelPT}" — substitute the WEEK LABEL provided above EXACTLY, do not recompute or shift the dates
+- Preference reminder: "📍 Weekday preference: ${schedule.weekdayRegion} (SF on radar)" in a semi-transparent pill
 
 ### 2. Note Section (if applicable)
 - Warm amber background (#fff3cd) with left border accent
@@ -122,7 +128,7 @@ Generate a self-contained HTML email body (no html, head, or body tags needed, j
 - **IMPORTANT**: Use the event's dayOfWeek and datePT fields for the date badge — do NOT calculate the day name yourself
 - **Special badges** if applicable: "FREE + 🍺 Open Bar" in green when relevant
 - **Event name**: Large bold text, linked to registration URL
-- **Time and location line**: "⏰ 4:00 PM – 6:30 PM | 📍 Location Name" using startTimePT and endTimePT, with a "South Bay ✅" or "SF" badge (pill-style, margin-left: 8px)
+- **Time and location line**: "⏰ {displayTime} | 📍 Location Name" using the event's displayTime field exactly as provided, with a "South Bay ✅" or "SF" badge (pill-style, margin-left: 8px)
 - **Description**: 2-3 sentence summary
 - **Tags row**: Colored pill badges for categories:
   - 🤖 AI (blue), 🚀 Startups (purple), 🎨 Product (orange), 👥 Founders (teal), 🔥 Free (green)
@@ -176,16 +182,45 @@ async function curateEventsWithAI(mergedData) {
   const models = [
     { name: PRIMARY_MODEL, label: "Gemini 3 Flash Preview (primary)" },
     { name: FALLBACK_MODEL, label: "Gemini 3.1 Flash Lite (fallback)" },
-    { name: STABLE_FALLBACK_MODEL, label: "Gemini 2.5 Flash Lite (stable fallback)" },
   ];
 
   const attempts = [];
 
+  // Build a corrective prompt that names the specific validation violations
+  // from a prior attempt, so the retry can fix them rather than blindly
+  // regenerating. The original prompt is still appended verbatim.
+  function buildCorrectivePrompt(originalPrompt, validation) {
+    return (
+      `Your previous response was rejected by automatic validation.\n` +
+      `Reasons (you MUST fix all of these):\n` +
+      validation.reasons.map((r) => `- ${r}`).join("\n") +
+      `\n\nCommon causes:\n` +
+      `- Shortlisting an event whose start time overlaps a busy calendar event\n` +
+      `- Surfacing an event whose location is outside the Bay Area\n` +
+      `- Using a placeholder href="#" instead of the real registration URL\n` +
+      `- Surfacing too few events from a large input (must surface multiple)\n` +
+      `- All-SF shortlist when South Bay alternatives exist\n\n` +
+      `Regenerate the full HTML email per the original spec below, fixing every issue.\n` +
+      `=== ORIGINAL PROMPT ===\n${originalPrompt}`
+    );
+  }
+
   for (let i = 0; i < models.length; i++) {
     const { name, label } = models[i];
 
+    // Each model gets up to 2 attempts: original prompt, then a corrective
+    // retry that names the validation violations from the first attempt.
+    let lastValidation = null;
+
+    for (let attemptNum = 0; attemptNum < 2; attemptNum++) {
+      const isCorrective = attemptNum > 0;
+      const promptToSend = isCorrective
+        ? buildCorrectivePrompt(prompt, lastValidation)
+        : prompt;
+      const attemptLabel = isCorrective ? `${label} [retry w/ feedback]` : label;
+
     try {
-      console.log(`   🔄 Trying ${label}...`);
+      console.log(`   🔄 Trying ${attemptLabel}...`);
 
       // Build generation config — thinkingConfig is only for Gemini 3+ models
       const generationConfig = {
@@ -209,7 +244,7 @@ async function curateEventsWithAI(mergedData) {
       // Send the prompt with a timeout so we fall back quickly
       // instead of hanging for 5+ minutes on an unresponsive model
       const result = await Promise.race([
-        model.generateContent(prompt),
+        model.generateContent(promptToSend),
         new Promise((_, reject) =>
           setTimeout(
             () => reject(new Error(`Gemini request timed out after ${AI_REQUEST_TIMEOUT_MS / 1000}s`)),
@@ -238,71 +273,91 @@ async function curateEventsWithAI(mergedData) {
         );
       }
 
-      // If the model stopped for any reason other than natural completion,
-      // the HTML is likely truncated — fall back to the next model
+      // Truncation is unlikely to fix itself with a corrective retry on the
+      // same model — advance straight to the next model.
       if (finishReason !== "STOP") {
         const reason = `Output truncated (finishReason: ${finishReason}, ${html.length} chars)`;
-        console.error(`   ⚠ ${label}: ${reason}`);
-        attempts.push({ model: name, label, outcome: "truncated", finishReason, usage: usage || null });
-        if (i === models.length - 1) {
+        console.error(`   ⚠ ${attemptLabel}: ${reason}`);
+        attempts.push({ model: name, label: attemptLabel, outcome: "truncated", finishReason, usage: usage || null });
+        if (i === models.length - 1 && isCorrective) {
           throw new Error("All AI models produced truncated output.\nLast: " + reason);
         }
-        console.log("   ⚠ Falling back to next model...");
-        continue;
+        break; // exit attempt loop, advance to next model
       }
 
       // Validate: catch clean-STOP-but-garbage outputs (hallucinated URLs,
-      // dropped-all-events). Advances the fallback chain on quality signals,
-      // not just truncation/error.
+      // dropped events, blocked-evening shortlists, calendar conflicts).
       const validation = validateCurationOutput(html, mergedData);
       if (!validation.ok) {
         const reason = `Validation failed: ${validation.reasons.join("; ")}`;
-        console.error(`   ⚠ ${label}: ${reason}`);
+        console.error(`   ⚠ ${attemptLabel}: ${reason}`);
         console.error(`     stats:`, validation.stats);
         attempts.push({
           model: name,
-          label,
+          label: attemptLabel,
           outcome: "invalid",
           reasons: validation.reasons,
           stats: validation.stats,
           finishReason,
           usage: usage || null,
         });
+        lastValidation = validation;
+        // First failure on this model: do a corrective retry naming the violations.
+        if (!isCorrective) {
+          console.log("   🔁 Retrying same model with corrective feedback...");
+          continue; // next iteration of inner attempt loop
+        }
+        // Already retried with feedback — advance to next model.
         if (i === models.length - 1) {
           throw new Error("All AI models produced invalid output.\nLast: " + reason);
         }
         console.log("   ⚠ Falling back to next model...");
-        continue;
+        break;
       }
 
       console.log(`✅ AI curation complete (${html.length} chars of HTML)`);
       console.log(`   📋 Validation passed:`, validation.stats);
       attempts.push({
         model: name,
-        label,
+        label: attemptLabel,
         outcome: "success",
         finishReason,
         usage: usage || null,
         stats: validation.stats,
       });
-      return { html, prompt, modelUsed: name, finishReason, usage: usage || null, attempts };
+      return { html, prompt: promptToSend, modelUsed: name, finishReason, usage: usage || null, attempts };
     } catch (err) {
-      console.error(`   ❌ ${label} failed:`, err.message);
-      attempts.push({ model: name, label, outcome: "error", error: err.message });
+      console.error(`   ❌ ${attemptLabel} failed:`, err.message);
+      attempts.push({ model: name, label: attemptLabel, outcome: "error", error: err.message });
 
-      // If this was the last model, throw the error
-      if (i === models.length - 1) {
+      if (i === models.length - 1 && isCorrective) {
         throw new Error(
           "All AI models failed. Cannot generate email.\n" +
             "Last error: " +
             err.message
         );
       }
+      // API errors (timeout, 503) — don't waste a corrective retry on the
+      // same model; advance straight to the next.
+      break;
+    }
+    } // end inner attempt loop
 
-      // Otherwise, log and try the fallback
+    if (i < models.length - 1) {
       console.log("   ⚠ Falling back to next model...");
     }
   }
+
+  // Outer model loop exhausted without a successful return. Compose a
+  // diagnostic from the recorded attempts so the operator can see what
+  // happened on each model.
+  const tail = attempts.slice(-models.length * 2);
+  const summary = tail
+    .map((a) => `${a.label}: ${a.outcome}${a.error ? ` (${a.error})` : ""}${a.reasons ? ` — ${a.reasons.join("; ")}` : ""}`)
+    .join("\n  ");
+  throw new Error(
+    "All AI models failed. Cannot generate email.\nAttempts:\n  " + summary
+  );
 }
 
 module.exports = { curateEventsWithAI, buildCurationPrompt };
