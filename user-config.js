@@ -12,55 +12,57 @@
 
 module.exports = {
   // ── Your Region ────────────────────────────────────────────
-  // Used in the email header (e.g., "Bay Area Tech Events").
+  // Shown in the email header (e.g., "Bay Area Tech Events").
+  // Also used by the AI as context for what "local" means.
   region: "San Francisco Bay Area",
 
   // ── Your Interests ─────────────────────────────────────────
   // The AI uses these lists to decide which events to include
-  // or exclude from your weekly digest.
+  // or exclude from your weekly digest. Be specific — the more
+  // precise your lists, the better the curation.
   interests: {
     // Events about these topics will be included.
     include: [
       "AI",
-      "consumer hardware",
       "startups",
       "founders",
       "entrepreneurship",
       "product launches",
       "demo days",
       "consumer tech",
+      "hardware",
     ],
 
     // Events about these topics will be excluded, even if they
-    // match something in your include list.
+    // also match something in your include list.
     exclude: [
       "Healthcare",
-      "HR",
-      "Finance",
-      "AI infrastructure",
-      "highly technical engineering (e.g. kernel development, inference optimization, CUDA programming)",
+      "HR tech",
+      "Finance / fintech",
+      "Highly technical deep dives (e.g. kernel development, CUDA programming)",
     ],
   },
 
   // ── Your Weekly Schedule ───────────────────────────────────
-  // Controls which events are geographically reachable for you
-  // on each part of the week, and which evenings to skip.
+  // Controls which events the AI shortlists vs. puts "on your
+  // radar," and which evenings to skip entirely.
   schedule: {
     // "all-day" = available daytime + evening (e.g. full-time founder)
     // "evening-only" = available evenings only (e.g. has a day job)
     availability: "all-day",
 
     // On weekdays (Mon–Fri), events in this area are shortlisted.
-    // Events in other cities (e.g. SF) on weekdays go to "Also On Your Radar".
+    // Events in other cities on weekdays go to "Also On Your Radar."
+    // Example values: "South Bay", "East Bay", "Peninsula", "SF"
     weekdayRegion: "South Bay",
 
-    // On weekends (Sat–Sun), events in this area are also allowed.
+    // On weekends (Sat–Sun), events in this area are shortlisted normally.
     weekendRegion: "SF",
 
-    // Evening events on these days are excluded entirely.
-    // Use full day names: "Monday", "Tuesday", "Wednesday", etc.
-    // Empty array = no day-of-week blocks; rely on Google Calendar busy
-    // events (e.g., a recurring small group) to handle blocked evenings.
+    // Evenings on these days are blocked — events starting after 4 PM
+    // will not be shortlisted. Use full day names.
+    // Example: ["Wednesday", "Friday"]
+    // Leave empty to rely entirely on your Google Calendar busy events.
     blockedEvenings: [],
   },
 
@@ -69,15 +71,13 @@ module.exports = {
     // Events above this price (in USD) are excluded by default.
     maxPriceUSD: 50,
 
-    // Events featuring any of these will bypass the price limit.
-    // Use descriptive phrases the AI can match against event details.
+    // Events matching any of these descriptions bypass the price limit.
+    // Write them as natural language phrases the AI can match against
+    // event titles and descriptions.
     priceExceptions: [
-      "top hardware founders",
-      "prominent AI researchers",
-      "tech executives",
-      "intimate networking dinners",
-      "premium specialty coffee tech events",
-      "Q-Grader networking events",
+      "prominent founders or investors as speakers",
+      "exclusive invite-only dinners",
+      "small-group mentorship or office hours",
     ],
   },
 };

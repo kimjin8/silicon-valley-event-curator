@@ -41,8 +41,9 @@ describe("buildCurationPrompt", () => {
 
   it("should include interest filtering rules", () => {
     const prompt = buildCurationPrompt(sampleMergedData);
-    expect(prompt).toContain("AI, consumer hardware, startups");
-    expect(prompt).toContain("Healthcare, HR, Finance");
+    expect(prompt).toContain("AI");
+    expect(prompt).toContain("startups");
+    expect(prompt).toContain("Healthcare");
   });
 
   it("should include schedule filtering rules", () => {
