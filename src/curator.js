@@ -97,7 +97,7 @@ Important: a balanced shortlist that includes ${schedule.weekdayRegion} events i
 - Do NOT convert timestamps from UTC — use the pre-computed PT fields.
 - Do NOT guess the source — use the source field from each event ("Cerebral Valley", "Luma SF", or "SF IRL").
 - For event time display, use the displayTime field as-is. It already handles overnight/multi-day events correctly (e.g., "Fri 7:00 PM – Sat 3:00 PM"). Do NOT recompose times yourself.
-- CALENDAR FIDELITY: when describing the user's schedule (e.g., the Note section or Calendar heads-up), use the most SPECIFIC calendar event with a precise time. If a flight has a specific time (e.g., "Flight to Panama" Sunday 8:16 PM), describe departure as Sunday — do NOT infer departure from a multi-day all-day block ("Kim in Panama" starting Monday). Multi-day blocks describe presence, not departure.
+- CALENDAR FIDELITY: when describing the user's schedule (e.g., the Note section or Calendar heads-up), use the most SPECIFIC calendar event. If a travel event has a specific departure time (e.g., "Flight to NYC" Saturday 7:00 PM), describe departure as Saturday — do NOT infer departure from a multi-day all-day block (e.g., "Trip to NYC" starting Sunday). Multi-day all-day blocks describe presence at the destination, not the departure date.
 - LOCATION SANITY: only shortlist or surface events physically located in the San Francisco Bay Area (San Francisco, Oakland, Berkeley, Palo Alto, Mountain View, Sunnyvale, San Jose, Stanford, Menlo Park, Redwood City, San Mateo, Cupertino, Santa Clara, Fremont, Hayward, etc.). If the location field shows a city outside the Bay Area (e.g., Reykjavik, NYC, LA, online-only with non-Bay-Area host), DROP the event entirely — do not put it in shortlist or radar. Bad upstream data is not the user's problem.
 
 ## OUTPUT FORMAT
@@ -128,7 +128,7 @@ Generate a self-contained HTML email body (no html, head, or body tags needed, j
 - **IMPORTANT**: Use the event's dayOfWeek and datePT fields for the date badge — do NOT calculate the day name yourself
 - **Special badges** if applicable: "FREE + 🍺 Open Bar" in green when relevant
 - **Event name**: Large bold text, linked to registration URL
-- **Time and location line**: "⏰ {displayTime} | 📍 Location Name" using the event's displayTime field exactly as provided, with a "South Bay ✅" or "SF" badge (pill-style, margin-left: 8px)
+- **Time and location line**: "⏰ {displayTime} | 📍 Location Name" using the event's displayTime field exactly as provided, with a "${schedule.weekdayRegion} ✅" or "${schedule.weekendRegion}" badge (pill-style, margin-left: 8px) to indicate which region preference the event satisfies
 - **Description**: 2-3 sentence summary
 - **Tags row**: Colored pill badges for categories:
   - 🤖 AI (blue), 🚀 Startups (purple), 🎨 Product (orange), 👥 Founders (teal), 🔥 Free (green)
@@ -169,6 +169,25 @@ If no events pass the filters, say so politely and suggest checking back next we
  * @returns {Promise<{html: string, prompt: string, modelUsed: string, finishReason: string, usage: object|null, attempts: Array}>}
  * @throws {Error} If both primary and fallback models fail
  */
+// Build a corrective prompt that names the specific validation violations
+// from a prior attempt, so the retry can fix them rather than blindly
+// regenerating. The original prompt is still appended verbatim.
+function buildCorrectivePrompt(originalPrompt, validation) {
+  return (
+    `Your previous response was rejected by automatic validation.\n` +
+    `Reasons (you MUST fix all of these):\n` +
+    validation.reasons.map((r) => `- ${r}`).join("\n") +
+    `\n\nCommon causes:\n` +
+    `- Shortlisting an event whose start time overlaps a busy calendar event\n` +
+    `- Surfacing an event whose location is outside the Bay Area\n` +
+    `- Using a placeholder href="#" instead of the real registration URL\n` +
+    `- Surfacing too few events from a large input (must surface multiple)\n` +
+    `- All-${userConfig.schedule.weekendRegion} shortlist when ${userConfig.schedule.weekdayRegion} alternatives exist\n\n` +
+    `Regenerate the full HTML email per the original spec below, fixing every issue.\n` +
+    `=== ORIGINAL PROMPT ===\n${originalPrompt}`
+  );
+}
+
 async function curateEventsWithAI(mergedData) {
   console.log("🤖 Curating events with Gemini AI...");
 
@@ -185,25 +204,6 @@ async function curateEventsWithAI(mergedData) {
   ];
 
   const attempts = [];
-
-  // Build a corrective prompt that names the specific validation violations
-  // from a prior attempt, so the retry can fix them rather than blindly
-  // regenerating. The original prompt is still appended verbatim.
-  function buildCorrectivePrompt(originalPrompt, validation) {
-    return (
-      `Your previous response was rejected by automatic validation.\n` +
-      `Reasons (you MUST fix all of these):\n` +
-      validation.reasons.map((r) => `- ${r}`).join("\n") +
-      `\n\nCommon causes:\n` +
-      `- Shortlisting an event whose start time overlaps a busy calendar event\n` +
-      `- Surfacing an event whose location is outside the Bay Area\n` +
-      `- Using a placeholder href="#" instead of the real registration URL\n` +
-      `- Surfacing too few events from a large input (must surface multiple)\n` +
-      `- All-SF shortlist when South Bay alternatives exist\n\n` +
-      `Regenerate the full HTML email per the original spec below, fixing every issue.\n` +
-      `=== ORIGINAL PROMPT ===\n${originalPrompt}`
-    );
-  }
 
   for (let i = 0; i < models.length; i++) {
     const { name, label } = models[i];
@@ -360,4 +360,4 @@ async function curateEventsWithAI(mergedData) {
   );
 }
 
-module.exports = { curateEventsWithAI, buildCurationPrompt };
+module.exports = { curateEventsWithAI, buildCurationPrompt, buildCorrectivePrompt };

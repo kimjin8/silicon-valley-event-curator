@@ -24,7 +24,7 @@ require("dotenv").config({ path: path.join(__dirname, "..", ".env") });
 //   Fallback: smaller/faster Lite model when primary is unavailable
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const PRIMARY_MODEL = "gemini-3-flash-preview";
-const FALLBACK_MODEL = "gemini-3.1-flash-lite-preview";
+const FALLBACK_MODEL = "gemini-3.1-flash-lite";
 
 // ── Email ───────────────────────────────────────────────────
 const RECIPIENT_EMAIL = process.env.RECIPIENT_EMAIL;
@@ -64,7 +64,7 @@ const SCRAPER_RETRY_DELAY_MS = 5_000; // 5 seconds
 // ── AI Settings ─────────────────────────────────────────────
 // How long to wait for the Gemini API to respond before falling
 // back to the next model (in milliseconds)
-const AI_REQUEST_TIMEOUT_MS = 120_000; // 120 seconds
+const AI_REQUEST_TIMEOUT_MS = 180_000; // 180 seconds
 
 // ── Validation ──────────────────────────────────────────────
 // Check that required environment variables are set. If any are

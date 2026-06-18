@@ -3,7 +3,7 @@
 // ============================================================
 // Vitest globals (describe, it, expect) are available automatically
 
-const { buildCurationPrompt } = require("../src/curator");
+const { buildCurationPrompt, buildCorrectivePrompt } = require("../src/curator");
 
 describe("buildCurationPrompt", () => {
   const sampleMergedData = {
@@ -84,6 +84,32 @@ describe("buildCurationPrompt", () => {
     const prompt = buildCurationPrompt(sampleMergedData);
     expect(prompt).toContain("specific event registration page");
     expect(prompt).toContain("NOT to a general listing page");
+  });
+});
+
+describe("buildCorrectivePrompt", () => {
+  const validation = {
+    reasons: ["Event 'Foo' overlaps busy calendar block", "Used href='#' placeholder"],
+  };
+
+  it("should name each validation reason", () => {
+    const out = buildCorrectivePrompt("ORIGINAL", validation);
+    expect(out).toContain("Event 'Foo' overlaps busy calendar block");
+    expect(out).toContain("Used href='#' placeholder");
+  });
+
+  it("should include the user's weekday and weekend region names", () => {
+    // Regression test for the 2026-06-15 prod failure where `schedule`
+    // was referenced without being in scope.
+    const out = buildCorrectivePrompt("ORIGINAL", validation);
+    expect(out).toContain("South Bay");
+    expect(out).toContain("SF");
+  });
+
+  it("should append the original prompt verbatim", () => {
+    const out = buildCorrectivePrompt("ORIGINAL_PROMPT_BODY", validation);
+    expect(out).toContain("=== ORIGINAL PROMPT ===");
+    expect(out).toContain("ORIGINAL_PROMPT_BODY");
   });
 });
 
