@@ -18,6 +18,7 @@ const {
   checkCalendarConflicts,
   checkSchemaInvariants,
   isBayAreaLocation,
+  nonBayAreaCityHint,
 } = require("../src/validator");
 
 // ── Minimal helpers to build realistic test fixtures ────────
@@ -585,6 +586,91 @@ describe("checkSchemaInvariants", () => {
       buildIndex(events)
     );
     expect(violations.length).toBe(0);
+  });
+});
+
+// ── Non-Bay-Area city cross-check (name / URL host) ─────────
+
+describe("nonBayAreaCityHint", () => {
+  it("catches a city named in the URL host subdomain", () => {
+    expect(
+      nonBayAreaCityHint(
+        "AI Tinkerers July Meetup",
+        "https://columbus.aitinkerers.org/p/x"
+      )
+    ).toBe("columbus");
+    expect(nonBayAreaCityHint("Some Dinner", "https://nyc.aitinkerers.org/p/y")).toBe("nyc");
+  });
+
+  it("catches a city named in the event title", () => {
+    expect(nonBayAreaCityHint("Seattle Founders Mixer", "https://lu.ma/z")).toBe("seattle");
+  });
+
+  it("does not flag genuine Bay Area events or hosts", () => {
+    expect(nonBayAreaCityHint("Builders Night", "https://luma.com/6uoda4dr")).toBeNull();
+    expect(nonBayAreaCityHint("SF AI Tinkerers", "https://sf.aitinkerers.org/p/x")).toBeNull();
+    expect(nonBayAreaCityHint("Palo Alto Demo Day", "https://lu.ma/abc")).toBeNull();
+  });
+
+  it("does not match a city name embedded inside a larger word", () => {
+    // "austin" inside "exhausting", "boston" inside a slug word, etc.
+    expect(nonBayAreaCityHint("An exhausting hackathon", "https://lu.ma/bostonian-club")).toBeNull();
+  });
+});
+
+describe("validateCurationOutput — mislocated non-Bay-Area event (Columbus regression)", () => {
+  // The CV API returned "AI Tinkerers - Columbus July Meetup" tagged
+  // location "San Francisco, CA" (URL host columbus.aitinkerers.org). The
+  // location allowlist passed it; the name/host cross-check must reject it.
+  it("rejects a shortlisted event whose name+URL are Columbus despite an SF location", () => {
+    const merged = makeMergedData({
+      cv: [
+        {
+          name: "AI Tinkerers - Columbus July Meetup [AI Tinkerers - Columbus]",
+          url: "https://columbus.aitinkerers.org/p/ai-tinkerers-columbus-july-meetup",
+          location: "San Francisco, CA",
+          dayOfWeek: "Monday",
+          startTimePT: "2:30 PM",
+          endTimePT: "5:00 PM",
+          date: "2026-07-06T21:30:00Z",
+          endDate: "2026-07-07T00:00:00Z",
+        },
+      ],
+    });
+    const html = `
+      <div>SHORTLISTED FOR YOU (1 EVENTS)</div>
+      <a href="https://columbus.aitinkerers.org/p/ai-tinkerers-columbus-july-meetup">Register →</a>
+      <div>ALSO ON YOUR RADAR</div>
+    `;
+    const result = validateCurationOutput(html, merged);
+    expect(result.ok).toBe(false);
+    expect(result.reasons.join(" ")).toMatch(/columbus/i);
+    expect(result.stats.schemaViolationCount).toBeGreaterThanOrEqual(1);
+  });
+
+  it("does not flag a genuine SF event with an SF location", () => {
+    const merged = makeMergedData({
+      cv: [
+        {
+          name: "Builders Night",
+          url: "https://luma.com/6uoda4dr",
+          location: "San Francisco, CA",
+          dayOfWeek: "Monday",
+          startTimePT: "6:30 PM",
+          endTimePT: "9:00 PM",
+          date: "2026-07-07T01:30:00Z",
+          endDate: "2026-07-07T04:00:00Z",
+        },
+      ],
+    });
+    const html = `
+      <div>SHORTLISTED FOR YOU (1 EVENTS)</div>
+      <a href="https://luma.com/6uoda4dr">Register →</a>
+      <div>ALSO ON YOUR RADAR</div>
+    `;
+    const result = validateCurationOutput(html, merged);
+    expect(result.ok).toBe(true);
+    expect(result.stats.schemaViolationCount).toBe(0);
   });
 });
 

@@ -11,6 +11,7 @@
 
 const { SCRAPER_URLS, SCRAPER_TIMEOUT_MS } = require("../config");
 const { sleep, withRetry, withBrowserRetry, scrollToLoadAll, toPacificTime, formatTimeRange } = require("./utils");
+const { nonBayAreaCityHint } = require("../locations");
 
 const CV_API_BASE = "https://api.cerebralvalley.ai/v1/public/event/pull";
 
@@ -27,6 +28,14 @@ function isBayArea(location) {
   if (!location) return false;
   const lower = location.toLowerCase();
   return BAY_AREA_PATTERNS.some((p) => lower.includes(p));
+}
+
+// Keep an event only if its location looks Bay Area AND neither its name nor
+// its registration host names a non-Bay-Area city. The second check catches
+// upstream mislabeling — the CV API returns "AI Tinkerers - Columbus" (host
+// columbus.aitinkerers.org) with location "San Francisco, CA".
+function isAttendableBayAreaEvent(e) {
+  return isBayArea(e.location) && !nonBayAreaCityHint(e.name, e.url);
 }
 
 /**
@@ -60,7 +69,7 @@ async function fetchFromAPI() {
   // Filter to Bay Area and deduplicate by name+date
   const seen = new Set();
   const bayAreaEvents = allEvents.filter((e) => {
-    if (!isBayArea(e.location)) return false;
+    if (!isAttendableBayAreaEvent(e)) return false;
     const key = `${e.name}|${e.startDateTime}`;
     if (seen.has(key)) return false;
     seen.add(key);
@@ -147,4 +156,4 @@ async function scrapeCerebralValley() {
   );
 }
 
-module.exports = { scrapeCerebralValley, isBayArea };
+module.exports = { scrapeCerebralValley, isBayArea, isAttendableBayAreaEvent };

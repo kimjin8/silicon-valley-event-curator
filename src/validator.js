@@ -15,6 +15,7 @@
 // ============================================================
 
 const userConfig = require("../user-config");
+const { nonBayAreaCityHint } = require("./locations");
 
 // ── URL normalization shared across checks ──────────────────
 
@@ -327,6 +328,17 @@ function checkSchemaInvariants(shortlistUrls, eventIndex) {
   const violations = [];
   for (const url of shortlistUrls) {
     const e = findEventForUrl(url, eventIndex);
+
+    // Name/host city check runs even when the event doesn't resolve, since the
+    // href alone (e.g. columbus.aitinkerers.org) can betray a mislocated event.
+    const cityHint = nonBayAreaCityHint(e?.name, url);
+    if (cityHint) {
+      const locNote = e?.location ? ` (its location claims "${e.location}")` : "";
+      violations.push(
+        `"${e?.name || url}" appears to be in ${cityHint}, not the Bay Area${locNote}`
+      );
+    }
+
     if (!e) continue;
     if (!isBayAreaLocation(e.location)) {
       violations.push(
@@ -475,4 +487,5 @@ module.exports = {
   checkCalendarConflicts,
   checkSchemaInvariants,
   isBayAreaLocation,
+  nonBayAreaCityHint,
 };

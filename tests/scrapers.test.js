@@ -8,7 +8,7 @@
 // ============================================================
 
 const { isListingPageUrl } = require("../src/scrapers/luma-sf");
-const { isBayArea } = require("../src/scrapers/cerebral-valley");
+const { isBayArea, isAttendableBayAreaEvent } = require("../src/scrapers/cerebral-valley");
 
 // ── Cerebral Valley Bay Area Filter Tests ──────────────────
 
@@ -40,6 +40,35 @@ describe("Cerebral Valley isBayArea filter", () => {
     expect(isBayArea(null)).toBe(false);
     expect(isBayArea(undefined)).toBe(false);
     expect(isBayArea("")).toBe(false);
+  });
+
+  describe("isAttendableBayAreaEvent — drops mislocated events at ingestion", () => {
+    it("drops an event whose name+host is another city despite an SF location", () => {
+      // Real CV API payload: location lies, name and host tell the truth.
+      expect(
+        isAttendableBayAreaEvent({
+          name: "AI Tinkerers - Columbus July Meetup [AI Tinkerers - Columbus]",
+          location: "San Francisco, CA",
+          url: "https://columbus.aitinkerers.org/p/ai-tinkerers-columbus-july-meetup",
+        })
+      ).toBe(false);
+    });
+
+    it("keeps a genuine Bay Area event", () => {
+      expect(
+        isAttendableBayAreaEvent({
+          name: "Builders Night",
+          location: "San Francisco, CA",
+          url: "https://luma.com/6uoda4dr",
+        })
+      ).toBe(true);
+    });
+
+    it("still drops events with a non-Bay-Area location", () => {
+      expect(
+        isAttendableBayAreaEvent({ name: "Madrid Dinner", location: "Other", url: "https://madrid.aitinkerers.org/p/x" })
+      ).toBe(false);
+    });
   });
 
   it("should be case-insensitive", () => {
