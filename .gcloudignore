@@ -11,6 +11,12 @@ google-token.json
 tests/
 vitest.config.js
 
+# Per-run diagnostic artifacts — contain personal calendar data, never ship them
+runs/
+
+# Separate web frontend — not part of the job image
+web/
+
 # Docs and local files — not needed in the image
 *.log
 *.md

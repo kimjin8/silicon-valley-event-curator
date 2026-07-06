@@ -3,7 +3,7 @@
 // ============================================================
 // Vitest globals (describe, it, expect) are available automatically
 
-const { buildCurationPrompt, buildCorrectivePrompt } = require("../src/curator");
+const { buildCurationPrompt, buildCorrectivePrompt, buildGenerationConfig } = require("../src/curator");
 
 describe("buildCurationPrompt", () => {
   const sampleMergedData = {
@@ -110,6 +110,33 @@ describe("buildCorrectivePrompt", () => {
     const out = buildCorrectivePrompt("ORIGINAL_PROMPT_BODY", validation);
     expect(out).toContain("=== ORIGINAL PROMPT ===");
     expect(out).toContain("ORIGINAL_PROMPT_BODY");
+  });
+});
+
+describe("buildGenerationConfig", () => {
+  // Regression for the 2026-07-06 prod failure: Gemini 3 ignored the numeric
+  // thinkingBudget on the real (hard) prompt and burned ~63k thinking tokens,
+  // consuming the whole maxOutputTokens budget and truncating the HTML
+  // (finishReason MAX_TOKENS). Gemini 3 must be capped via thinkingLevel, which
+  // the API actually honors, not thinkingBudget.
+  it("caps Gemini 3 thinking with thinkingLevel, not thinkingBudget", () => {
+    const cfg = buildGenerationConfig("gemini-3.1-flash-lite");
+    expect(cfg.thinkingConfig).toEqual({ thinkingLevel: "low" });
+    expect(cfg.thinkingConfig.thinkingBudget).toBeUndefined();
+  });
+
+  it("applies thinkingLevel to the primary Gemini 3 model too", () => {
+    const cfg = buildGenerationConfig("gemini-3-flash-preview");
+    expect(cfg.thinkingConfig.thinkingLevel).toBe("low");
+  });
+
+  it("keeps thinkingBudget for Gemini 2.5 (predates thinkingLevel)", () => {
+    const cfg = buildGenerationConfig("gemini-2.5-flash");
+    expect(cfg.thinkingConfig).toEqual({ thinkingBudget: 8192 });
+  });
+
+  it("still caps output tokens for every model", () => {
+    expect(buildGenerationConfig("gemini-3.1-flash-lite").maxOutputTokens).toBe(65536);
   });
 });
 

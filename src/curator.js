@@ -188,6 +188,27 @@ function buildCorrectivePrompt(originalPrompt, validation) {
   );
 }
 
+// Build the per-model generation config. Thinking must be capped so it can't
+// consume the entire maxOutputTokens budget and truncate the HTML. Gemini 3
+// silently ignores thinkingBudget on hard prompts (observed ~63k thinking
+// tokens against an 8192 budget → MAX_TOKENS truncation); its thinkingLevel
+// control IS honored (~4k thinking tokens at "low"). Gemini 2.5 predates
+// thinkingLevel and still uses thinkingBudget.
+function buildGenerationConfig(name) {
+  const generationConfig = {
+    temperature: 0.2,
+    maxOutputTokens: 65536,
+  };
+
+  if (name.startsWith("gemini-3")) {
+    generationConfig.thinkingConfig = { thinkingLevel: "low" };
+  } else if (name.startsWith("gemini-2.5")) {
+    generationConfig.thinkingConfig = { thinkingBudget: 8192 };
+  }
+
+  return generationConfig;
+}
+
 async function curateEventsWithAI(mergedData) {
   console.log("🤖 Curating events with Gemini AI...");
 
@@ -222,18 +243,7 @@ async function curateEventsWithAI(mergedData) {
     try {
       console.log(`   🔄 Trying ${attemptLabel}...`);
 
-      // Build generation config — thinkingConfig is only for Gemini 3+ models
-      const generationConfig = {
-        temperature: 0.2,
-        maxOutputTokens: 65536,
-      };
-
-      // Only add thinkingConfig for models that support it (Gemini 2.5+)
-      if (name.startsWith("gemini-3") || name.startsWith("gemini-2.5")) {
-        generationConfig.thinkingConfig = {
-          thinkingBudget: 8192,
-        };
-      }
+      const generationConfig = buildGenerationConfig(name);
 
       // Get the model instance
       const model = genAI.getGenerativeModel({
@@ -360,4 +370,4 @@ async function curateEventsWithAI(mergedData) {
   );
 }
 
-module.exports = { curateEventsWithAI, buildCurationPrompt, buildCorrectivePrompt };
+module.exports = { curateEventsWithAI, buildCurationPrompt, buildCorrectivePrompt, buildGenerationConfig };
