@@ -141,6 +141,7 @@ Generate a self-contained HTML email body (no html, head, or body tags needed, j
 - "📅 Calendar heads-up:" prefix in bold
 - Friendly note about what's already on the user's calendar for the relevant days
 - Mention specific calendar events by name and time
+- TRAVEL: If the busy events include a flight leaving the Bay Area (e.g., "Flight SFO to …") with a later return flight, the user is OUT OF TOWN between those flights. Say so plainly (e.g., "You're in {destination} Thu–Mon, so these picks are all before you fly out") — this is why the week skews to the days before departure.
 
 ### 6. "Also On Your Radar" Section
 - Header: "✨ ALSO ON YOUR RADAR" in uppercase with sparkle emoji
