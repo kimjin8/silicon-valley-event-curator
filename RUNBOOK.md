@@ -181,6 +181,20 @@ gcloud run jobs execute startup-event-curator --region=us-west1 --project=startu
 
 ---
 
+### INC-008: Wrong registration links + prefiltered events resurfaced (2026-09-07)
+
+**Symptom:** The 2026-09-07 10:00 digest shortlisted four events (Llama Lounge 26, VC Insights, Open Model Hack, Agentic Commerce) whose Register buttons opened four unrelated Sep 8–9 SF events (Industrial Tech Breakfast, Level Five VC Summit, Agents & Bagels, Growth Leaders Breakfast). Two of the four picks were weekend events the calendar was blocked for.
+
+**Root cause:** Two layered gaps in the AI-writes-the-HTML design.
+1. The prefilter dropped 74 of 83 structured events but left each scraper's `raw` text summary in the prompt, so the AI still saw every dropped event's name, date, and location — just without a URL. All four picks were prefiltered events (calendar conflicts with busy blocks on Wed evening and both weekend days).
+2. The first attempt used `href="#"` for them; the validator caught that and the corrective retry "fixed" it by borrowing URLs from surviving structured events. The URL-fidelity check only verified each URL existed somewhere in the input, not that it belonged to the named event, and the calendar-conflict check resolved each URL to the wrong (non-conflicting) event, so it passed.
+
+**Fix:** Rewrote generation so the AI only judges. `curator.js` builds a candidate list (structured events with URLs only, prefiltered, deduped, region-tagged) and asks Gemini for a JSON verdict per id; `render.js` builds the HTML from the candidate records. The AI cannot name a URL, a date, or an event that is not a candidate. Regression tests: `tests/render.test.js` ("links each shortlisted card to that event's own URL"), `tests/validator.test.js` ("ignores ids that are not candidates"), `tests/curator.test.js` ("never dumps the scrapers' raw text").
+
+**Lesson:** Anything the AI can copy from its prompt, it can miscopy. Give it only ids and take everything factual from the source record.
+
+---
+
 ## Monitoring & Alerts
 
 | What | How |

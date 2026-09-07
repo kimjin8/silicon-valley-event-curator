@@ -14,8 +14,9 @@
 //   3. Fetch your Google Calendar events (in parallel with scraping)
 //   4. Filter calendar to only "busy" events
 //   5. Merge all data together
-//   6. Send to Gemini AI for curation + HTML email generation
-//   7. Send the email via Gmail
+//   6. Build attendable candidates, ask Gemini for a verdict on each
+//   7. Render the HTML digest from verdicts + candidate data
+//   8. Send the email via Gmail
 // ============================================================
 
 // Force immediate logging flush
@@ -33,7 +34,8 @@ const { scrapeCerebralValley } = require("./src/scrapers/cerebral-valley");
 const { scrapeLumaSF } = require("./src/scrapers/luma-sf");
 const { scrapeSFIRL } = require("./src/scrapers/sf-irl");
 const { getCalendarEvents, filterBusyEvents } = require("./src/calendar");
-const { curateEventsWithAI } = require("./src/curator");
+const { buildCandidates, judgeEvents } = require("./src/curator");
+const { renderDigest } = require("./src/render");
 const { prefilterMergedData } = require("./src/prefilter");
 const { sendEmail } = require("./src/email");
 
@@ -198,9 +200,23 @@ async function runWorkflow({ dryRun = false } = {}) {
   sources.forEach((s) => console.log(`   ${s.ok ? "✅" : "❌"} ${s.name}`));
   console.log();
 
-  // Step 6: AI curation
-  const { html: htmlEmail, prompt, modelUsed, finishReason, usage, attempts } =
-    await curateEventsWithAI(mergedData);
+  // Step 6: AI judgement (interest/region/price only — everything else is code)
+  const candidates = buildCandidates(mergedData);
+  console.log(`🎯 ${candidates.length} attendable candidates with registration links`);
+  const { decisions, note, prompt, rawText, modelUsed, usage, attempts } = await judgeEvents(candidates, {
+    sfIrlRaw: sfIrl.raw || "",
+  });
+
+  // Step 7: Render the email deterministically
+  const htmlEmail = renderDigest({
+    dateRange,
+    candidates,
+    decisions,
+    note,
+    busyEvents,
+    prefilterReport,
+  });
+  console.log(`✉️  Rendered digest (${htmlEmail.length} chars of HTML)`);
 
   // Persist a full run artifact for post-hoc diagnosis.
   // Written BEFORE email send so a send failure still leaves a trace.
@@ -218,20 +234,22 @@ async function runWorkflow({ dryRun = false } = {}) {
       busyEvents,
     },
     prefilter: prefilterReport,
+    candidates,
     ai: {
       prompt,
       promptChars: prompt.length,
       modelUsed,
-      finishReason,
       usage,
       attempts,
-      html: htmlEmail,
-      htmlChars: htmlEmail.length,
+      rawText,
+      decisions,
+      note,
     },
+    html: htmlEmail,
   });
   if (artifactPath) console.log(`📝 Run artifact: ${artifactPath}`);
 
-  // Step 7: Send email (or print in dry-run mode)
+  // Step 8: Send email (or print in dry-run mode)
   if (dryRun) {
     console.log("\n========================================");
     console.log("🏜️  DRY RUN — Email not sent");

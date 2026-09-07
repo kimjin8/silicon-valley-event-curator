@@ -44,4 +44,26 @@ function nonBayAreaCityHint(name, url) {
   return null;
 }
 
-module.exports = { NON_BAY_AREA_CITIES, nonBayAreaCityHint };
+// Coarse sub-region of a Bay Area location string, used to apply the user's
+// weekday/weekend region preference. Order matters: "South San Francisco" is
+// Peninsula, so the more specific lists run before the bare SF check.
+const REGION_CITIES = [
+  ["South Bay", ["palo alto", "mountain view", "sunnyvale", "san jose", "santa clara",
+    "cupertino", "los altos", "los gatos", "campbell", "saratoga", "milpitas", "stanford"]],
+  ["Peninsula", ["menlo park", "redwood city", "san mateo", "burlingame", "millbrae",
+    "san carlos", "belmont", "foster city", "south san francisco", "san bruno",
+    "daly city", "pacifica"]],
+  ["East Bay", ["oakland", "berkeley", "emeryville", "alameda", "fremont", "hayward",
+    "san leandro", "richmond", "newark", "union city", "walnut creek"]],
+  ["SF", ["san francisco", "sf,", ", sf"]],
+];
+
+function regionOf(location) {
+  const s = String(location || "").toLowerCase();
+  for (const [region, cities] of REGION_CITIES) {
+    if (cities.some((c) => s.includes(c))) return region;
+  }
+  return "Other";
+}
+
+module.exports = { NON_BAY_AREA_CITIES, nonBayAreaCityHint, regionOf };
