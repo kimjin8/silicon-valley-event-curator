@@ -100,7 +100,7 @@ function radarItem(c, d) {
       ${reason}
     </div>
     <a href="${esc(c.url)}" style="font-weight:bold;font-size:15px;color:#34495e;text-decoration:none;">${esc(c.name)}</a>
-    <div style="font-size:13px;color:#7f8c8d;">${esc(c.displayTime)} | ${esc(c.location)} | ${c.isFree ? "Free" : esc(c.price || "")} | Source: ${esc(c.source)}</div>
+    <div style="font-size:13px;color:#7f8c8d;">${[c.displayTime, c.location, c.isFree ? "Free" : c.price, `Source: ${c.source}`].filter(Boolean).map(esc).join(" | ")}</div>
     <p style="font-size:13px;color:#666;margin:5px 0;">${esc(d.blurb)}</p>
   </div>`;
 }

@@ -78,13 +78,15 @@ describe("renderDigest", () => {
   it("renders radar items with the AI's reason label and the event's own link", () => {
     const html = renderDigest({
       dateRange,
-      candidates: [cand({ region: "SF", location: "San Francisco, CA" })],
+      candidates: [cand({ region: "SF", location: "San Francisco, CA", isFree: false })],
       decisions: [{ id: "e1", verdict: "radar", blurb: "Great but SF.", tags: [], radarReason: "SF on Weekday" }],
     });
     expect(html).toContain("ALSO ON YOUR RADAR");
     expect(html).toContain("SF on Weekday");
     expect(html).toContain('<a href="https://luma.com/llamalounge26"');
     expect(html).toContain("SHORTLISTED FOR YOU (0 EVENTS)");
+    // unknown price: no empty "|  |" segment
+    expect(html).toContain("5:00 PM – 9:00 PM | San Francisco, CA | Source: Cerebral Valley");
   });
 
   it("escapes AI-written text and event names", () => {
